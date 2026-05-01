@@ -84,6 +84,10 @@ export function GroupDetail({
   function buildGroupLink(): string {
     const origin = window.location.origin;
     if (useSharedLink && group.shareToken) return `${origin}/g/${group.shareToken}`;
+    if (group.shareToken) {
+      return `${origin}/g/${group.shareToken}`;
+    }
+
     return `${origin}/group/${group.id}`;
   }
 
