@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Cuentas Claras">
+  <rect width="512" height="512" rx="96" fill="#0f766e"/>
+  <path fill="#f8fafc" d="M144 148h224c24 0 44 20 44 44v128c0 24-20 44-44 44H144c-24 0-44-20-44-44V192c0-24 20-44 44-44Zm0 40a4 4 0 0 0-4 4v24h232v-24a4 4 0 0 0-4-4H144Zm-4 68v64c0 2 2 4 4 4h224c2 0 4-2 4-4v-64H140Zm40 28h96v28h-96v-28Zm128 0h32v28h-32v-28Z"/>
+  <circle cx="158" cy="214" r="10" fill="#99f6e4"/>
+  <circle cx="190" cy="214" r="10" fill="#99f6e4"/>
+</svg>
