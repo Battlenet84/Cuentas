@@ -526,3 +526,82 @@ drop trigger if exists on_settlement_cycles_changed on public.settlement_cycles;
 create trigger on_settlement_cycles_changed
 after insert or update or delete on public.settlement_cycles
 for each row execute function public.notify_group_changed();
+
+-- =========================================================
+-- Realtime Broadcast: aviso de cambios por grupo
+-- =========================================================
+-- Esta función NO manda datos sensibles por WebSocket.
+-- Solo avisa que algo cambió en el grupo.
+-- El frontend escucha group:<shareToken> y después refresca por RPC.
+
+create or replace function public.notify_group_changed()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid;
+  v_share_token text;
+begin
+  if TG_TABLE_NAME = 'groups' then
+    if TG_OP = 'DELETE' then
+      v_share_token := OLD.share_token;
+    else
+      v_share_token := NEW.share_token;
+    end if;
+  else
+    if TG_OP = 'DELETE' then
+      v_group_id := OLD.group_id;
+    else
+      v_group_id := NEW.group_id;
+    end if;
+
+    select g.share_token
+    into v_share_token
+    from public.groups g
+    where g.id = v_group_id;
+  end if;
+
+  if v_share_token is not null then
+    perform realtime.send(
+      jsonb_build_object(
+        'table', TG_TABLE_NAME,
+        'operation', TG_OP,
+        'at', now()
+      ),
+      'group_changed',
+      'group:' || v_share_token,
+      false
+    );
+  end if;
+
+  return null;
+end;
+$$;
+
+drop trigger if exists on_groups_changed on public.groups;
+create trigger on_groups_changed
+after insert or update or delete on public.groups
+for each row
+execute function public.notify_group_changed();
+
+drop trigger if exists on_participants_changed on public.participants;
+create trigger on_participants_changed
+after insert or update or delete on public.participants
+for each row
+execute function public.notify_group_changed();
+
+drop trigger if exists on_expenses_changed on public.expenses;
+create trigger on_expenses_changed
+after insert or update or delete on public.expenses
+for each row
+execute function public.notify_group_changed();
+
+drop trigger if exists on_settlement_cycles_changed on public.settlement_cycles;
+create trigger on_settlement_cycles_changed
+after insert or update or delete on public.settlement_cycles
+for each row
+execute function public.notify_group_changed();
+
+NOTIFY pgrst, 'reload schema';
