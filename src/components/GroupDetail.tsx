@@ -15,12 +15,16 @@ type GroupDetailProps = {
   expenses: Expense[];
   settlementCycles: SettlementCycle[];
   onBack: () => void;
-  onAddParticipant: (name: string, alias?: string) => void;
-  onUpdateParticipant: (participant: Participant) => void;
-  onCreateExpense: (expense: Omit<Expense, 'id' | 'createdAt'>) => void;
-  onUpdateExpense: (expense: Expense) => void;
-  onDeleteExpense: (expenseId: string) => void;
-  onCloseOpenExpenses: () => void;
+  onAddParticipant: (name: string, alias?: string) => void | Promise<void>;
+  onUpdateParticipant: (participant: Participant) => void | Promise<void>;
+  onCreateExpense: (expense: Omit<Expense, 'id' | 'createdAt'>) => void | Promise<void>;
+  onUpdateExpense: (expense: Expense) => void | Promise<void>;
+  onDeleteExpense: (expenseId: string) => void | Promise<void>;
+  onCloseOpenExpenses: () => void | Promise<void>;
+  onRetry?: () => void | Promise<void>;
+  errorMessage?: string | null;
+  isSaving?: boolean;
+  useSharedLink?: boolean;
 };
 
 export function GroupDetail({
@@ -34,7 +38,11 @@ export function GroupDetail({
   onCreateExpense,
   onUpdateExpense,
   onDeleteExpense,
-  onCloseOpenExpenses
+  onCloseOpenExpenses,
+  onRetry,
+  errorMessage,
+  isSaving = false,
+  useSharedLink = false
 }: GroupDetailProps) {
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [isExpensePanelOpen, setIsExpensePanelOpen] = useState(false);
@@ -76,7 +84,7 @@ export function GroupDetail({
   function buildGroupLink(): string {
     const origin = window.location.origin;
     const token = group.shareToken ?? group.id;
-    return `${origin}/group/${group.id}?share=${token}`;
+    return useSharedLink && group.shareToken ? `${origin}/g/${token}` : `${origin}/group/${group.id}`;
   }
 
   function openCreateExpensePanel() {
@@ -112,12 +120,12 @@ export function GroupDetail({
     }
   }
 
-  function handleClose() {
+  async function handleClose() {
     if (openExpenses.length === 0) return;
     const confirmed = window.confirm(
       'Esto va a sacar los gastos abiertos del balance actual. Usalo solo si ya registraron o acordaron los pagos.'
     );
-    if (confirmed) onCloseOpenExpenses();
+    if (confirmed) await onCloseOpenExpenses();
   }
 
   const expenseForm = (
@@ -180,6 +188,22 @@ export function GroupDetail({
         </div>
       </div>
       {copyStatus ? <p className="text-sm text-slate-600">{copyStatus}</p> : null}
+      <p className="text-sm text-slate-500">
+        Cualquier persona con este link puede ver y editar los gastos del grupo.
+      </p>
+
+      {errorMessage ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <p>{errorMessage}</p>
+          {onRetry ? (
+            <button type="button" onClick={onRetry} className="mt-2 font-semibold text-red-800">
+              Reintentar
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {isSaving ? <p className="text-sm font-medium text-slate-600">Guardando cambios...</p> : null}
 
       <div className="space-y-5 lg:hidden">
         <SettlementList settlements={settlements} participants={groupParticipants} />

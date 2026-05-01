@@ -1,6 +1,8 @@
 # Cuentas Claras
 
-Web app para dividir gastos en grupos permanentes: cenas, viajes, casa compartida o juntadas. El MVP funciona sin backend ni login y persiste datos en `localStorage`.
+Web app para dividir gastos en grupos permanentes: cenas, viajes, casa compartida o juntadas. La persistencia principal es Supabase para que varias personas puedan ver y editar el mismo grupo desde distintos celulares.
+
+Esta version no tiene login todavia.
 
 ## Instalar
 
@@ -20,7 +22,7 @@ npm run dev
 npm run build
 ```
 
-## Preview de producción
+## Preview de produccion
 
 ```bash
 npm run preview
@@ -32,66 +34,130 @@ npm run preview
 npm run test
 ```
 
-## PWA
+## Variables de entorno
 
-La base PWA está configurada con `public/manifest.webmanifest`, íconos PNG/SVG, `apple-touch-icon` y `public/sw.js`.
+Crear `.env.local`:
 
-Para probar local:
+```bash
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_PUBLISHABLE_KEY=...
+```
 
-1. Ejecutar `npm run build`.
-2. Ejecutar `npm run preview`.
-3. Abrir la URL del preview en Chrome.
-4. Revisar Application > Manifest y Service Workers.
-5. Usar la opción de instalar app si el navegador la ofrece.
+No subir `.env.local` al repo. `.env.example` queda como plantilla.
 
-## Deploy en Vercel
+Si faltan estas variables, la app muestra un aviso y funciona en modo local con `localStorage`. Ese modo sirve para desarrollo, pero no permite compartir grupos entre celulares.
 
-1. Subir el repositorio a GitHub, GitLab o Bitbucket.
-2. Crear proyecto en Vercel.
-3. Framework: Vite.
-4. Build command: `npm run build`.
-5. Output directory: `dist`.
+## Configurar Supabase
 
-El archivo `vercel.json` deja preparada la app como SPA.
+1. Crear proyecto en Supabase.
+2. Verificar:
+   - Enable Data API: ON
+   - Automatically expose new tables and functions: OFF
+   - Enable automatic RLS: ON
+3. Abrir SQL Editor.
+4. Ejecutar completo el archivo `supabase/schema.sql`.
+5. Copiar Project URL.
+6. Copiar Publishable key.
+7. Completar `.env.local`.
+8. Reiniciar `npm run dev`.
 
-## Lógica de cálculo
+El SQL crea tablas con RLS activado y sin policies abiertas. El acceso anonimo pasa por RPC `SECURITY DEFINER` usando `share_token`.
 
-La lógica pura está en `src/lib/calculations.ts`:
+## Vercel
+
+En Vercel, agregar:
+
+```bash
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_PUBLISHABLE_KEY=...
+```
+
+Ruta:
+
+`Project Settings > Environment Variables`
+
+Despues redeploy.
+
+Build command:
+
+```bash
+npm run build
+```
+
+Output directory:
+
+```bash
+dist
+```
+
+## Probar grupo compartido
+
+1. Correr la app con variables Supabase configuradas.
+2. Crear un grupo.
+3. Entrar al grupo y tocar "Copiar link del grupo".
+4. Abrir ese link en otro celular o navegador: `/g/:shareToken`.
+5. Agregar participantes.
+6. Cargar un gasto desde un celular.
+7. Recargar el grupo en el otro celular.
+8. Verificar que aparece el gasto.
+
+No hay realtime todavia. Para ver cambios hechos por otra persona, recargar la pagina.
+
+## Seguridad actual
+
+Cualquier persona con el link puede ver y editar los gastos del grupo. Esta version no tiene login todavia.
+
+No se usa `service_role` en frontend. No hay llaves secretas en el codigo.
+
+## Navegacion
+
+- Home: `/`
+- Grupo compartido: `/g/:shareToken`
+- Grupo local legado: `/group/:groupId`
+
+Cuando Supabase esta configurado, los grupos nuevos redirigen a `/g/:shareToken`.
+
+## Logica de calculo
+
+La logica pura esta en `src/lib/calculations.ts`:
 
 - `calculateBalances(group, participants, expenses)`
 - `simplifySettlements(balances)`
 - `getOpenExpenses(expenses)`
 
-Los montos se manejan en centavos y se formatean en `src/lib/money.ts`.
+Los montos se guardan como centavos y se formatean en `src/lib/money.ts`.
 
 ## Persistencia
 
-La capa de datos está en `src/data/storage.ts`. Los componentes no escriben directo en `localStorage`; reciben funciones desde `App.tsx` o usan funciones de storage a través del estado central.
+- Supabase: `src/data/supabaseStorage.ts`
+- Fallback local: `src/data/storage.ts`
+- Cliente Supabase: `src/lib/supabase.ts`
+- SQL: `supabase/schema.sql`
 
-## Navegación
+La UI no escribe directo en `localStorage` ni llama tablas Supabase directamente.
 
-- Home: `/`
-- Detalle local del grupo: `/group/:groupId`
+## PWA
 
-Al recargar una URL de grupo, la app reabre ese grupo si existe en el `localStorage` de ese dispositivo. Si no existe, vuelve al home y muestra un mensaje.
+La base PWA esta configurada con:
 
-## Grupos compartidos
+- `public/manifest.webmanifest`
+- `public/sw.js`
+- iconos PNG/SVG
+- `apple-touch-icon`
 
-Cada grupo nuevo se crea con `shareToken`. Por ahora el botón "Copiar link del grupo" copia una URL local usable con `groupId` y deja el token incluido para la futura ruta compartida `/g/:shareToken` cuando se migre a Supabase.
+Para probar:
 
-## Preparado para backend/Supabase
+1. `npm run build`
+2. `npm run preview`
+3. Abrir Chrome DevTools > Application.
+4. Revisar Manifest y Service Worker.
+5. Instalar desde el navegador si aparece la opcion.
 
-- Tipos separados en `src/types.ts`.
-- Storage aislado detrás de funciones de datos.
-- IDs y fechas normalizados.
-- `shareToken` ya existe en el modelo `Group`.
-- Cálculos puros sin dependencia de React.
-- Componentes reciben datos y callbacks, lo que permite reemplazar `localStorage` por API o Supabase más adelante.
+## Mejoras futuras
 
-## Pendiente
-
-- Edición completa de gastos.
-- Archivado de grupos.
-- Exportar cierres.
-- Sincronización multi-dispositivo.
-- Backend y autenticación cuando el MVP lo necesite.
+- Login.
+- Permisos por grupo.
+- Realtime.
+- Historial de cambios.
+- Confirmacion de pagos.
+- Invitaciones con roles.

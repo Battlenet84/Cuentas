@@ -2,24 +2,32 @@ import type { Expense, Participant } from '../types';
 import { formatDate } from '../lib/dates';
 import { formatARS } from '../lib/money';
 import { EmptyState } from './EmptyState';
+import { useState } from 'react';
 
 type ExpenseListProps = {
   expenses: Expense[];
   participants: Participant[];
   onEditExpense: (expense: Expense) => void;
-  onDeleteExpense: (expenseId: string) => void;
+  onDeleteExpense: (expenseId: string) => void | Promise<void>;
 };
 
 export function ExpenseList({ expenses, participants, onEditExpense, onDeleteExpense }: ExpenseListProps) {
+  const [error, setError] = useState<string | null>(null);
   const sortedExpenses = [...expenses].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
 
   function participantName(id: string): string {
     return participants.find((participant) => participant.id === id)?.name ?? 'Participante eliminado';
   }
 
-  function handleDelete(expense: Expense) {
+  async function handleDelete(expense: Expense) {
     const confirmed = window.confirm(`Eliminar el gasto "${expense.title}"?`);
-    if (confirmed) onDeleteExpense(expense.id);
+    if (!confirmed) return;
+    try {
+      await onDeleteExpense(expense.id);
+      setError(null);
+    } catch {
+      setError('No se pudo eliminar el gasto.');
+    }
   }
 
   if (sortedExpenses.length === 0) {
@@ -29,6 +37,7 @@ export function ExpenseList({ expenses, participants, onEditExpense, onDeleteExp
   return (
     <section className="space-y-3">
       <h2 className="text-base font-semibold text-slate-900">Historial de gastos</h2>
+      {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
       <div className="grid gap-3">
         {sortedExpenses.map((expense) => (
           <article key={expense.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">

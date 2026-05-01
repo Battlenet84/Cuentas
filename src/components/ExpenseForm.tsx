@@ -7,8 +7,8 @@ type ExpenseFormProps = {
   groupId: string;
   participants: Participant[];
   expense?: Expense | null;
-  onCreateExpense: (expense: Omit<Expense, 'id' | 'createdAt'>) => void;
-  onUpdateExpense?: (expense: Expense) => void;
+  onCreateExpense: (expense: Omit<Expense, 'id' | 'createdAt'>) => void | Promise<void>;
+  onUpdateExpense?: (expense: Expense) => void | Promise<void>;
   onCancel?: () => void;
 };
 
@@ -42,6 +42,7 @@ export function ExpenseForm({
   const [splitParticipantIds, setSplitParticipantIds] = useState<string[]>([]);
   const [date, setDate] = useState(todayInputValue());
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!expense) {
@@ -79,7 +80,7 @@ export function ExpenseForm({
     );
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const amountCents = parseARSInput(amount);
 
@@ -103,31 +104,38 @@ export function ExpenseForm({
       return;
     }
 
-    if (expense && onUpdateExpense) {
-      onUpdateExpense({
-        ...expense,
+    setIsSubmitting(true);
+    try {
+      if (expense && onUpdateExpense) {
+        await onUpdateExpense({
+          ...expense,
+          title: title.trim(),
+          amountCents,
+          paidByParticipantId,
+          splitParticipantIds,
+          date
+        });
+        onCancel?.();
+        return;
+      }
+
+      await onCreateExpense({
+        groupId,
         title: title.trim(),
         amountCents,
         paidByParticipantId,
         splitParticipantIds,
-        date
+        date,
+        settlementCycleId: null
       });
+
+      resetForm();
       onCancel?.();
-      return;
+    } catch {
+      setError(expense ? 'No se pudo guardar el gasto.' : 'No se pudo guardar el gasto.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onCreateExpense({
-      groupId,
-      title: title.trim(),
-      amountCents,
-      paidByParticipantId,
-      splitParticipantIds,
-      date,
-      settlementCycleId: null
-    });
-
-    resetForm();
-    onCancel?.();
   }
 
   if (activeParticipants.length === 0 && !expense) {
@@ -208,8 +216,12 @@ export function ExpenseForm({
       </label>
 
       <div className="grid gap-2 sm:grid-cols-2">
-        <button type="submit" className="min-h-11 rounded-md bg-teal-700 px-4 font-medium text-white hover:bg-teal-800">
-          {expense ? 'Guardar cambios' : 'Guardar gasto'}
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="min-h-11 rounded-md bg-teal-700 px-4 font-medium text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+        >
+          {isSubmitting ? 'Guardando...' : expense ? 'Guardar cambios' : 'Guardar gasto'}
         </button>
         {onCancel ? (
           <button

@@ -5,8 +5,8 @@ type ParticipantsManagerProps = {
   groupId: string;
   participants: Participant[];
   expenses: Expense[];
-  onAddParticipant: (name: string, alias?: string) => void;
-  onUpdateParticipant: (participant: Participant) => void;
+  onAddParticipant: (name: string, alias?: string) => void | Promise<void>;
+  onUpdateParticipant: (participant: Participant) => void | Promise<void>;
 };
 
 export function ParticipantsManager({
@@ -19,6 +19,7 @@ export function ParticipantsManager({
   const [name, setName] = useState('');
   const [alias, setAlias] = useState('');
   const [showInactive, setShowInactive] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const groupParticipants = participants.filter((participant) => participant.groupId === groupId);
   const visibleParticipants = showInactive
     ? groupParticipants
@@ -33,23 +34,34 @@ export function ParticipantsManager({
     return ids;
   }, [expenses, groupId]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
-    onAddParticipant(trimmedName, alias.trim() || undefined);
-    setName('');
-    setAlias('');
+    try {
+      await onAddParticipant(trimmedName, alias.trim() || undefined);
+      setName('');
+      setAlias('');
+      setError(null);
+    } catch {
+      setError('No se pudo guardar el participante.');
+    }
   }
 
-  function handleRemove(participant: Participant) {
+  async function handleRemove(participant: Participant) {
     const hasExpenses = participantIdsWithExpenses.has(participant.id);
-    if (hasExpenses) {
-      onUpdateParticipant({ ...participant, isActive: false });
-      return;
-    }
+    try {
+      if (hasExpenses) {
+        await onUpdateParticipant({ ...participant, isActive: false });
+        setError(null);
+        return;
+      }
 
-    onUpdateParticipant({ ...participant, isActive: false });
+      await onUpdateParticipant({ ...participant, isActive: false });
+      setError(null);
+    } catch {
+      setError('No se pudo guardar el participante.');
+    }
   }
 
   return (
@@ -68,6 +80,7 @@ export function ParticipantsManager({
       </div>
 
       <form onSubmit={handleSubmit} className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3">
+        {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
         <input
           value={name}
           onChange={(event) => setName(event.target.value)}
@@ -112,7 +125,11 @@ export function ParticipantsManager({
               ) : (
                 <button
                   type="button"
-                  onClick={() => onUpdateParticipant({ ...participant, isActive: true })}
+                  onClick={() =>
+                    void Promise.resolve(onUpdateParticipant({ ...participant, isActive: true }))
+                      .then(() => setError(null))
+                      .catch(() => setError('No se pudo guardar el participante.'))
+                  }
                   className="rounded-md bg-teal-700 px-3 py-2 text-sm font-medium text-white"
                 >
                   Reactivar
