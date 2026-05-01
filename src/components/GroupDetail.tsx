@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Expense, Group, Participant, SettlementCycle } from '../types';
+import type { RealtimeStatus } from '../data/realtime';
 import { calculateBalances, getOpenExpenses, simplifySettlements } from '../lib/calculations';
 import { formatARS } from '../lib/money';
 import { BalanceSummary } from './BalanceSummary';
@@ -22,9 +23,12 @@ type GroupDetailProps = {
   onDeleteExpense: (expenseId: string) => void | Promise<void>;
   onCloseOpenExpenses: () => void | Promise<void>;
   onRetry?: () => void | Promise<void>;
+  onManualRefresh?: () => void | Promise<void>;
   errorMessage?: string | null;
   isSaving?: boolean;
   useSharedLink?: boolean;
+  syncStatus?: RealtimeStatus;
+  lastSyncAt?: string | null;
 };
 
 export function GroupDetail({
@@ -40,9 +44,12 @@ export function GroupDetail({
   onDeleteExpense,
   onCloseOpenExpenses,
   onRetry,
+  onManualRefresh,
   errorMessage,
   isSaving = false,
-  useSharedLink = false
+  useSharedLink = false,
+  syncStatus = 'idle',
+  lastSyncAt
 }: GroupDetailProps) {
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [isExpensePanelOpen, setIsExpensePanelOpen] = useState(false);
@@ -84,11 +91,15 @@ export function GroupDetail({
   function buildGroupLink(): string {
     const origin = window.location.origin;
     if (useSharedLink && group.shareToken) return `${origin}/g/${group.shareToken}`;
-    if (group.shareToken) {
-      return `${origin}/g/${group.shareToken}`;
-    }
-
     return `${origin}/group/${group.id}`;
+  }
+
+  function syncLabel(): string {
+    if (syncStatus === 'connecting') return 'Conectando tiempo real...';
+    if (syncStatus === 'connected') return lastSyncAt ? 'Actualizado recién' : 'Tiempo real activo';
+    if (syncStatus === 'syncing') return 'Actualizando...';
+    if (syncStatus === 'error') return 'No se pudo sincronizar';
+    return '';
   }
 
   function openCreateExpensePanel() {
@@ -195,6 +206,14 @@ export function GroupDetail({
       <p className="text-sm text-slate-500">
         Cualquier persona con este link puede ver y editar los gastos del grupo.
       </p>
+      {onManualRefresh ? (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+          <span>{syncLabel()}</span>
+          <button type="button" onClick={onManualRefresh} className="font-semibold text-teal-800">
+            Actualizar
+          </button>
+        </div>
+      ) : null}
 
       {errorMessage ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">

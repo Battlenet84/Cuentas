@@ -98,10 +98,23 @@ dist
 4. Abrir ese link en otro celular o navegador: `/g/:shareToken`.
 5. Agregar participantes.
 6. Cargar un gasto desde un celular.
-7. Recargar el grupo en el otro celular.
-8. Verificar que aparece el gasto.
+7. Verificar que aparece en el otro celular sin recargar.
 
-No hay realtime todavia. Para ver cambios hechos por otra persona, recargar la pagina.
+## Tiempo real
+
+Los grupos compartidos usan Supabase Realtime Broadcast.
+
+La base emite un aviso al topic `group:<shareToken>` cuando cambian `groups`, `participants`, `expenses` o `settlement_cycles`.
+
+El WebSocket no manda nombres, montos, participantes ni gastos. Solo manda:
+
+- tabla
+- operacion
+- timestamp
+
+Cuando la app recibe `group_changed`, recarga el grupo con `loadGroupByShareToken(shareToken)`. La fuente de verdad sigue siendo Supabase por RPC y `share_token`.
+
+Si el canal no conecta, la app no se rompe. El boton "Actualizar" queda como fallback manual.
 
 ## Seguridad actual
 
@@ -130,6 +143,7 @@ Los montos se guardan como centavos y se formatean en `src/lib/money.ts`.
 ## Persistencia
 
 - Supabase: `src/data/supabaseStorage.ts`
+- Realtime Broadcast: `src/data/realtime.ts`
 - Fallback local: `src/data/storage.ts`
 - Cliente Supabase: `src/lib/supabase.ts`
 - SQL: `supabase/schema.sql`
@@ -157,7 +171,8 @@ Para probar:
 
 - Login.
 - Permisos por grupo.
-- Realtime.
+- Canales privados.
+- Presencia.
 - Historial de cambios.
 - Confirmacion de pagos.
 - Invitaciones con roles.

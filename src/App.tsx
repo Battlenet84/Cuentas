@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CreateGroupForm } from './components/CreateGroupForm';
 import { GroupDetail } from './components/GroupDetail';
 import { GroupList } from './components/GroupList';
@@ -25,6 +25,7 @@ import {
   updateRemoteExpense,
   updateRemoteParticipant
 } from './data/supabaseStorage';
+import { subscribeToGroupChanges, type RealtimeStatus } from './data/realtime';
 import { getOpenExpenses } from './lib/calculations';
 import { createId, createShareToken } from './lib/ids';
 import { isSupabaseConfigured, supabaseConfigError } from './lib/supabase';
@@ -61,6 +62,10 @@ function App() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [isLoadingGroup, setIsLoadingGroup] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<RealtimeStatus>('idle');
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const realtimeRefreshTimeoutRef = useRef<number | null>(null);
+  const isRealtimeRefreshingRef = useRef(false);
 
   const selectedGroupId =
     route.kind === 'localGroup'
@@ -106,6 +111,45 @@ function App() {
   }, [route]);
 
   useEffect(() => {
+    if (route.kind !== 'sharedGroup' || !isSupabaseConfigured) {
+      setSyncStatus('idle');
+      return;
+    }
+
+    const cleanup = subscribeToGroupChanges({
+      shareToken: route.shareToken,
+      onStatusChange: setSyncStatus,
+      onError: () => setDetailError('No se pudo sincronizar.'),
+      onChange: () => {
+        if (realtimeRefreshTimeoutRef.current) window.clearTimeout(realtimeRefreshTimeoutRef.current);
+
+        realtimeRefreshTimeoutRef.current = window.setTimeout(() => {
+          if (isRealtimeRefreshingRef.current) return;
+
+          isRealtimeRefreshingRef.current = true;
+          setSyncStatus('syncing');
+          refreshRemoteGroup(route.shareToken, { quiet: true })
+            .catch(() => {
+              setSyncStatus('error');
+              setDetailError('No se pudo sincronizar.');
+            })
+            .finally(() => {
+              isRealtimeRefreshingRef.current = false;
+            });
+        }, 300);
+      }
+    });
+
+    return () => {
+      if (realtimeRefreshTimeoutRef.current) {
+        window.clearTimeout(realtimeRefreshTimeoutRef.current);
+        realtimeRefreshTimeoutRef.current = null;
+      }
+      cleanup();
+    };
+  }, [route]);
+
+  useEffect(() => {
     if (route.kind !== 'localGroup') return;
     const exists = state.groups.some((group) => group.id === route.groupId);
     if (exists) return;
@@ -127,19 +171,22 @@ function App() {
     else window.history.pushState(null, '', path);
   }
 
-  async function refreshRemoteGroup(shareToken: string) {
-    setIsLoadingGroup(true);
+  async function refreshRemoteGroup(shareToken: string, options?: { quiet?: boolean }) {
+    if (!options?.quiet) setIsLoadingGroup(true);
     setDetailError(null);
     try {
       const remoteState = await loadGroupByShareToken(shareToken);
       setState(remoteState);
       setRouteMessage(null);
+      setLastSyncAt(new Date().toISOString());
+      if (route.kind === 'sharedGroup') setSyncStatus('connected');
     } catch {
       setDetailError('No se pudo cargar la información del grupo.');
       setRouteMessage('No encontramos este grupo.');
       setState({ groups: [], participants: [], expenses: [], settlementCycles: [] });
+      setSyncStatus('error');
     } finally {
-      setIsLoadingGroup(false);
+      if (!options?.quiet) setIsLoadingGroup(false);
     }
   }
 
@@ -329,9 +376,12 @@ function App() {
             onDeleteExpense={handleDeleteExpense}
             onCloseOpenExpenses={() => handleCloseOpenExpenses(selectedGroup.id)}
             onRetry={route.kind === 'sharedGroup' ? () => refreshRemoteGroup(route.shareToken) : undefined}
+            onManualRefresh={route.kind === 'sharedGroup' ? () => refreshRemoteGroup(route.shareToken, { quiet: true }) : undefined}
             errorMessage={detailError}
             isSaving={isSaving}
             useSharedLink={route.kind === 'sharedGroup'}
+            syncStatus={syncStatus}
+            lastSyncAt={lastSyncAt}
           />
         </div>
       </div>

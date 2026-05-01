@@ -468,3 +468,61 @@ grant execute on function update_expense_by_token(text, uuid, text, integer, uui
 grant execute on function delete_expense_by_token(text, uuid) to anon;
 grant execute on function close_cycle_by_token(text) to anon;
 grant execute on function update_group_by_token(text, text) to anon;
+
+create or replace function public.notify_group_changed()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid;
+  v_share_token text;
+begin
+  if TG_TABLE_NAME = 'groups' then
+    v_group_id := coalesce(NEW.id, OLD.id);
+  else
+    v_group_id := coalesce(NEW.group_id, OLD.group_id);
+  end if;
+
+  select share_token
+  into v_share_token
+  from public.groups
+  where id = v_group_id;
+
+  if v_share_token is not null then
+    perform realtime.send(
+      jsonb_build_object(
+        'table', TG_TABLE_NAME,
+        'operation', TG_OP,
+        'at', now()
+      ),
+      'group_changed',
+      'group:' || v_share_token,
+      false
+    );
+  end if;
+
+  return null;
+end;
+$$;
+
+drop trigger if exists on_groups_changed on public.groups;
+create trigger on_groups_changed
+after insert or update or delete on public.groups
+for each row execute function public.notify_group_changed();
+
+drop trigger if exists on_participants_changed on public.participants;
+create trigger on_participants_changed
+after insert or update or delete on public.participants
+for each row execute function public.notify_group_changed();
+
+drop trigger if exists on_expenses_changed on public.expenses;
+create trigger on_expenses_changed
+after insert or update or delete on public.expenses
+for each row execute function public.notify_group_changed();
+
+drop trigger if exists on_settlement_cycles_changed on public.settlement_cycles;
+create trigger on_settlement_cycles_changed
+after insert or update or delete on public.settlement_cycles
+for each row execute function public.notify_group_changed();
