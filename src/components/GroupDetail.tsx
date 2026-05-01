@@ -83,8 +83,8 @@ export function GroupDetail({
 
   function buildGroupLink(): string {
     const origin = window.location.origin;
-    const token = group.shareToken ?? group.id;
-    return useSharedLink && group.shareToken ? `${origin}/g/${token}` : `${origin}/group/${group.id}`;
+    if (useSharedLink && group.shareToken) return `${origin}/g/${group.shareToken}`;
+    return `${origin}/group/${group.id}`;
   }
 
   function openCreateExpensePanel() {

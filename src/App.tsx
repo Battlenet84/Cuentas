@@ -35,7 +35,10 @@ type Route =
   | { kind: 'localGroup'; groupId: string }
   | { kind: 'sharedGroup'; shareToken: string };
 
-function routeFromPath(pathname: string): Route {
+function routeFromLocation(pathname: string, search: string): Route {
+  const shareToken = new URLSearchParams(search).get('share');
+  if (shareToken) return { kind: 'sharedGroup', shareToken };
+
   const sharedMatch = /^\/g\/([^/]+)$/.exec(pathname);
   if (sharedMatch) return { kind: 'sharedGroup', shareToken: decodeURIComponent(sharedMatch[1]) };
 
@@ -53,7 +56,7 @@ function routePath(route: Route): string {
 
 function App() {
   const [state, setState] = useState<AppState>(() => (isSupabaseConfigured ? emptyState : loadState()));
-  const [route, setRoute] = useState<Route>(() => routeFromPath(window.location.pathname));
+  const [route, setRoute] = useState<Route>(() => routeFromLocation(window.location.pathname, window.location.search));
   const [routeMessage, setRouteMessage] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [isLoadingGroup, setIsLoadingGroup] = useState(false);
@@ -76,7 +79,7 @@ function App() {
 
   useEffect(() => {
     function handlePopState() {
-      setRoute(routeFromPath(window.location.pathname));
+      setRoute(routeFromLocation(window.location.pathname, window.location.search));
       setRouteMessage(null);
       setDetailError(null);
     }
@@ -87,6 +90,11 @@ function App() {
 
   useEffect(() => {
     if (route.kind !== 'sharedGroup') return;
+
+    const expectedPath = routePath(route);
+    if (window.location.pathname !== expectedPath || window.location.search) {
+      window.history.replaceState(null, '', expectedPath);
+    }
 
     if (!isSupabaseConfigured) {
       setRouteMessage(supabaseConfigError);
