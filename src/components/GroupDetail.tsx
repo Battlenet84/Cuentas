@@ -21,6 +21,7 @@ type GroupDetailProps = {
   currentMembership?: GroupMembership | null;
   members?: GroupMemberView[];
   onBack: () => void;
+  onSignOut?: () => void | Promise<void>;
   onAddParticipant: (name: string, alias?: string) => void | Promise<void>;
   onUpdateParticipant: (participant: Participant) => void | Promise<void>;
   onCreateExpense: (expense: Omit<Expense, 'id' | 'createdAt'>) => void | Promise<void>;
@@ -48,6 +49,7 @@ export function GroupDetail({
   currentMembership,
   members = [],
   onBack,
+  onSignOut,
   onAddParticipant,
   onUpdateParticipant,
   onCreateExpense,
@@ -173,9 +175,16 @@ export function GroupDetail({
 
   return (
     <div className="space-y-5">
-      <button type="button" onClick={onBack} className="text-sm font-medium text-teal-800">
-        Volver a grupos
-      </button>
+      <div className="flex items-center justify-between gap-3">
+        <button type="button" onClick={onBack} className="text-sm font-medium text-teal-800">
+          Volver a grupos
+        </button>
+        {onSignOut ? (
+          <button type="button" onClick={onSignOut} className="text-sm font-medium text-slate-600">
+            Cerrar sesión
+          </button>
+        ) : null}
+      </div>
 
       <header className="rounded-lg bg-slate-900 p-5 text-white">
         <p className="text-sm text-slate-300">Grupo</p>

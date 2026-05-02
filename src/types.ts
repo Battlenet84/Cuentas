@@ -67,4 +67,5 @@ export type AppState = {
   memberships?: GroupMembership[];
   currentMembership?: GroupMembership | null;
   accessStatus?: GroupDataAccess;
+  claimedParticipantIds?: string[];
 };

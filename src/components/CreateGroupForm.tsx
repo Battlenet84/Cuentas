@@ -1,18 +1,23 @@
 import { FormEvent, useState } from 'react';
 
 type CreateGroupFormProps = {
-  onCreate: (name: string) => void;
+  onCreate: (input: { name: string; ownerParticipantName: string }) => void;
+  requiresOwnerName?: boolean;
 };
 
-export function CreateGroupForm({ onCreate }: CreateGroupFormProps) {
+export function CreateGroupForm({ onCreate, requiresOwnerName = false }: CreateGroupFormProps) {
   const [name, setName] = useState('');
+  const [ownerParticipantName, setOwnerParticipantName] = useState('');
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedName = name.trim();
+    const trimmedOwnerName = ownerParticipantName.trim();
     if (!trimmedName) return;
-    onCreate(trimmedName);
+    if (requiresOwnerName && !trimmedOwnerName) return;
+    onCreate({ name: trimmedName, ownerParticipantName: trimmedOwnerName });
     setName('');
+    setOwnerParticipantName('');
   }
 
   return (
@@ -20,7 +25,7 @@ export function CreateGroupForm({ onCreate }: CreateGroupFormProps) {
       <label className="block text-sm font-medium text-slate-700" htmlFor="group-name">
         Nombre del grupo
       </label>
-      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+      <div className="mt-2 grid gap-2">
         <input
           id="group-name"
           value={name}
@@ -28,6 +33,18 @@ export function CreateGroupForm({ onCreate }: CreateGroupFormProps) {
           className="min-h-11 flex-1 rounded-md border border-slate-300 px-3 text-base"
           placeholder="Cena viernes, viaje, casa compartida"
         />
+        {requiresOwnerName ? (
+          <label className="grid gap-1 text-sm font-medium text-slate-700" htmlFor="owner-name">
+            Tu nombre en este grupo
+            <input
+              id="owner-name"
+              value={ownerParticipantName}
+              onChange={(event) => setOwnerParticipantName(event.target.value)}
+              className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+              placeholder="Flor"
+            />
+          </label>
+        ) : null}
         <button
           type="submit"
           className="min-h-11 rounded-md bg-teal-700 px-4 font-medium text-white hover:bg-teal-800"

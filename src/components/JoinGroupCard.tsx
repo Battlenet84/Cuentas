@@ -4,17 +4,19 @@ import type { Group, Participant } from '../types';
 type JoinGroupCardProps = {
   group: Group;
   participants: Participant[];
+  claimedParticipantIds?: string[];
   onJoin: (input: { participantId?: string | null; newParticipantName?: string; newParticipantAlias?: string }) => Promise<void>;
   onBack: () => void;
 };
 
-export function JoinGroupCard({ group, participants, onJoin, onBack }: JoinGroupCardProps) {
+export function JoinGroupCard({ group, participants, claimedParticipantIds = [], onJoin, onBack }: JoinGroupCardProps) {
   const [selectedParticipantId, setSelectedParticipantId] = useState('');
   const [name, setName] = useState('');
   const [alias, setAlias] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(false);
   const activeParticipants = participants.filter((participant) => participant.isActive);
+  const claimedIds = new Set(claimedParticipantIds);
 
   async function handleExistingJoin(participantId: string) {
     setIsJoining(true);
@@ -66,11 +68,14 @@ export function JoinGroupCard({ group, participants, onJoin, onBack }: JoinGroup
               <button
                 key={participant.id}
                 type="button"
-                disabled={isJoining}
+                disabled={isJoining || claimedIds.has(participant.id)}
                 onClick={() => handleExistingJoin(participant.id)}
                 className="min-h-11 rounded-md border border-slate-300 px-3 text-left font-medium text-slate-800 disabled:opacity-60"
               >
                 {participant.name}
+                {claimedIds.has(participant.id) ? (
+                  <span className="ml-2 text-sm font-normal text-slate-500">Ya está asociado a otra persona.</span>
+                ) : null}
               </button>
             ))}
           </div>

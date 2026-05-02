@@ -69,6 +69,7 @@ type RemoteGroupData = {
   accessStatus?: GroupDataAccess;
   requiresJoin?: boolean;
   accessRevoked?: boolean;
+  claimedParticipantIds?: string[];
 };
 
 type RemoteMyGroup = {
@@ -156,7 +157,8 @@ function emptyRemoteState(): AppState {
     settlementCycles: [],
     memberships: [],
     currentMembership: null,
-    accessStatus: 'requires_join'
+    accessStatus: 'requires_join',
+    claimedParticipantIds: []
   };
 }
 
@@ -171,7 +173,8 @@ function mapGroupData(data: RemoteGroupData): AppState {
     settlementCycles: (data.settlementCycles ?? []).map(mapSettlementCycle),
     memberships: (data.memberships ?? []).map(mapMembership),
     currentMembership: data.currentMembership ? mapMembership(data.currentMembership) : null,
-    accessStatus
+    accessStatus,
+    claimedParticipantIds: data.claimedParticipantIds ?? []
   };
 }
 
@@ -200,12 +203,13 @@ export async function loadGroupByShareToken(shareToken: string): Promise<AppStat
   return mapGroupData(assertData(data as RemoteGroupData | null, error, 'No se pudo cargar la información del grupo.'));
 }
 
-export async function createRemoteGroup(name: string): Promise<Group> {
+export async function createRemoteGroup(input: { name: string; ownerParticipantName: string }): Promise<Group> {
   const client = getSupabaseClient();
   const shareToken = createShareToken();
-  const { data, error } = await client.rpc('create_group_with_token', {
-    p_name: name,
-    p_share_token: shareToken
+  const { data, error } = await client.rpc('create_group_with_owner', {
+    p_name: input.name,
+    p_share_token: shareToken,
+    p_owner_participant_name: input.ownerParticipantName
   });
 
   return mapGroup(assertData(data as RemoteGroup | null, error, 'No se pudo crear el grupo.'));

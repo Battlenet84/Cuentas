@@ -607,6 +607,290 @@ execute function public.notify_group_changed();
 NOTIFY pgrst, 'reload schema';
 
 -- =========================================================
+-- Email/password auth flow
+-- =========================================================
+-- Before creating the two unique indexes below, diagnose old test duplicates:
+--
+-- select group_id, auth_user_id, count(*)
+-- from public.group_memberships
+-- where status = 'active'
+-- group by group_id, auth_user_id
+-- having count(*) > 1;
+--
+-- select group_id, participant_id, count(*)
+-- from public.group_memberships
+-- where status = 'active'
+--   and participant_id is not null
+-- group by group_id, participant_id
+-- having count(*) > 1;
+--
+-- If an index fails because of old data, revoke or clean duplicated test
+-- memberships manually. This script does not delete data automatically.
+
+create unique index if not exists group_memberships_active_user_group_idx
+  on group_memberships (group_id, auth_user_id)
+  where status = 'active';
+
+create unique index if not exists group_memberships_active_participant_group_idx
+  on group_memberships (group_id, participant_id)
+  where status = 'active' and participant_id is not null;
+
+create or replace function public.create_group_with_owner(
+  p_name text,
+  p_share_token text,
+  p_owner_participant_name text
+)
+returns groups
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group groups%rowtype;
+  v_participant participants%rowtype;
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then
+    raise exception 'Necesitás iniciar sesión para crear grupos.';
+  end if;
+  if nullif(trim(p_name), '') is null then
+    raise exception 'El nombre del grupo es obligatorio.';
+  end if;
+  if nullif(trim(p_share_token), '') is null then
+    raise exception 'El token del grupo es obligatorio.';
+  end if;
+  if nullif(trim(p_owner_participant_name), '') is null then
+    raise exception 'Tu nombre en este grupo es obligatorio.';
+  end if;
+
+  insert into groups (name, share_token)
+  values (trim(p_name), trim(p_share_token))
+  returning * into v_group;
+
+  insert into participants (group_id, name)
+  values (v_group.id, trim(p_owner_participant_name))
+  returning * into v_participant;
+
+  insert into group_memberships (group_id, participant_id, auth_user_id, role, status)
+  values (v_group.id, v_participant.id, v_user_id, 'owner', 'active');
+
+  return v_group;
+end;
+$$;
+
+create or replace function public.get_group_data(p_share_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group groups%rowtype;
+  v_user_id uuid := auth.uid();
+  v_membership group_memberships%rowtype;
+  v_has_active boolean;
+  v_has_revoked boolean;
+begin
+  if v_user_id is null then
+    raise exception 'Necesitás iniciar sesión.';
+  end if;
+
+  select * into v_group from groups where share_token = p_share_token and archived_at is null;
+  if not found then
+    raise exception 'No encontramos este grupo.';
+  end if;
+
+  select exists (
+    select 1 from group_memberships
+    where group_id = v_group.id and auth_user_id = v_user_id and status = 'active'
+  ) into v_has_active;
+
+  select exists (
+    select 1 from group_memberships
+    where group_id = v_group.id and auth_user_id = v_user_id and status = 'revoked'
+  ) into v_has_revoked;
+
+  if not v_has_active and v_has_revoked then
+    return jsonb_build_object(
+      'group', to_jsonb(v_group),
+      'participants', '[]'::jsonb,
+      'expenses', '[]'::jsonb,
+      'settlementCycles', '[]'::jsonb,
+      'memberships', '[]'::jsonb,
+      'currentMembership', null,
+      'claimedParticipantIds', '[]'::jsonb,
+      'accessStatus', 'revoked',
+      'accessRevoked', true
+    );
+  end if;
+
+  if not v_has_active then
+    return jsonb_build_object(
+      'group', to_jsonb(v_group),
+      'participants', coalesce(
+        (
+          select jsonb_agg(to_jsonb(p) order by p.created_at asc)
+          from participants p
+          where p.group_id = v_group.id and p.is_active = true
+        ),
+        '[]'::jsonb
+      ),
+      'expenses', '[]'::jsonb,
+      'settlementCycles', '[]'::jsonb,
+      'memberships', '[]'::jsonb,
+      'currentMembership', null,
+      'claimedParticipantIds', coalesce(
+        (
+          select jsonb_agg(m.participant_id)
+          from group_memberships m
+          where m.group_id = v_group.id
+            and m.status = 'active'
+            and m.participant_id is not null
+        ),
+        '[]'::jsonb
+      ),
+      'accessStatus', 'requires_join',
+      'requiresJoin', true
+    );
+  end if;
+
+  update group_memberships
+  set last_seen_at = now()
+  where group_id = v_group.id and auth_user_id = v_user_id and status = 'active'
+  returning * into v_membership;
+
+  return jsonb_build_object(
+    'group', to_jsonb(v_group),
+    'participants', coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at asc) from participants p where p.group_id = v_group.id), '[]'::jsonb),
+    'expenses', coalesce((select jsonb_agg(to_jsonb(e) order by e.date desc, e.created_at desc) from expenses e where e.group_id = v_group.id), '[]'::jsonb),
+    'settlementCycles', coalesce((select jsonb_agg(to_jsonb(sc) order by sc.closed_at desc) from settlement_cycles sc where sc.group_id = v_group.id), '[]'::jsonb),
+    'memberships', case
+      when v_membership.role = 'owner' then coalesce((select jsonb_agg(to_jsonb(m) order by m.joined_at asc) from group_memberships m where m.group_id = v_group.id), '[]'::jsonb)
+      else '[]'::jsonb
+    end,
+    'currentMembership', to_jsonb(v_membership),
+    'claimedParticipantIds', coalesce(
+      (
+        select jsonb_agg(m.participant_id)
+        from group_memberships m
+        where m.group_id = v_group.id and m.status = 'active' and m.participant_id is not null
+      ),
+      '[]'::jsonb
+    ),
+    'accessStatus', 'member'
+  );
+end;
+$$;
+
+create or replace function public.join_group_by_token(
+  p_share_token text,
+  p_participant_id uuid default null,
+  p_new_participant_name text default null,
+  p_new_participant_alias text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid;
+  v_user_id uuid := auth.uid();
+  v_membership group_memberships%rowtype;
+  v_participant participants%rowtype;
+  v_role text := 'member';
+begin
+  if v_user_id is null then
+    raise exception 'Necesitás iniciar sesión.';
+  end if;
+
+  select id into v_group_id from groups where share_token = p_share_token and archived_at is null;
+  if v_group_id is null then raise exception 'No encontramos este grupo.'; end if;
+
+  if exists (select 1 from group_memberships where group_id = v_group_id and auth_user_id = v_user_id and status = 'revoked') then
+    raise exception 'Tu acceso a este grupo fue revocado.';
+  end if;
+
+  select * into v_membership from group_memberships where group_id = v_group_id and auth_user_id = v_user_id and status = 'active';
+  if found then
+    if v_membership.participant_id is not null then select * into v_participant from participants where id = v_membership.participant_id; end if;
+    return jsonb_build_object('membership', to_jsonb(v_membership), 'participant', case when v_participant.id is null then null else to_jsonb(v_participant) end);
+  end if;
+
+  if not exists (select 1 from group_memberships where group_id = v_group_id and status = 'active') then
+    v_role := 'owner';
+  end if;
+
+  if p_participant_id is not null then
+    select * into v_participant from participants where id = p_participant_id and group_id = v_group_id and is_active = true;
+    if not found then raise exception 'Ese participante no pertenece al grupo.'; end if;
+    if exists (
+      select 1 from group_memberships
+      where group_id = v_group_id and participant_id = p_participant_id and status = 'active'
+    ) then
+      raise exception 'Ese participante ya está asociado a otra persona.';
+    end if;
+  elsif nullif(trim(p_new_participant_name), '') is not null then
+    insert into participants (group_id, name, alias)
+    values (v_group_id, trim(p_new_participant_name), nullif(trim(p_new_participant_alias), ''))
+    returning * into v_participant;
+  else
+    raise exception 'Elegí quién sos o creá un participante nuevo.';
+  end if;
+
+  insert into group_memberships (group_id, participant_id, auth_user_id, role, status)
+  values (v_group_id, v_participant.id, v_user_id, v_role, 'active')
+  returning * into v_membership;
+
+  return jsonb_build_object('membership', to_jsonb(v_membership), 'participant', to_jsonb(v_participant));
+end;
+$$;
+
+create or replace function public.update_my_group_identity(p_share_token text, p_participant_id uuid)
+returns group_memberships
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid;
+  v_user_id uuid := auth.uid();
+  v_membership group_memberships%rowtype;
+begin
+  if v_user_id is null then raise exception 'Necesitás iniciar sesión.'; end if;
+  select id into v_group_id from groups where share_token = p_share_token and archived_at is null;
+  if v_group_id is null then raise exception 'No encontramos este grupo.'; end if;
+  if not exists (select 1 from participants where id = p_participant_id and group_id = v_group_id and is_active = true) then
+    raise exception 'Ese participante no pertenece al grupo.';
+  end if;
+  if exists (
+    select 1 from group_memberships
+    where group_id = v_group_id
+      and participant_id = p_participant_id
+      and status = 'active'
+      and auth_user_id <> v_user_id
+  ) then
+    raise exception 'Ese participante ya está asociado a otra persona.';
+  end if;
+
+  update group_memberships
+  set participant_id = p_participant_id, last_seen_at = now()
+  where group_id = v_group_id and auth_user_id = v_user_id and status = 'active'
+  returning * into v_membership;
+  if not found then raise exception 'No sos miembro activo de este grupo.'; end if;
+  return v_membership;
+end;
+$$;
+
+grant execute on function create_group_with_owner(text, text, text) to authenticated;
+grant execute on function get_my_groups() to authenticated;
+grant execute on function get_group_data(text) to authenticated;
+grant execute on function join_group_by_token(text, uuid, text, text) to authenticated;
+grant execute on function update_my_group_identity(text, uuid) to authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- =========================================================
 -- Anonymous Auth + memberships
 -- =========================================================
 

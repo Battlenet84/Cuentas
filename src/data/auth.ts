@@ -1,5 +1,44 @@
-import type { Session } from '@supabase/supabase-js';
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../lib/supabase';
+
+function normalizeAuthError(message?: string): string {
+  const text = message?.toLowerCase() ?? '';
+  if (text.includes('already registered') || text.includes('already exists') || text.includes('user already')) {
+    return 'Ya existe una cuenta con ese email.';
+  }
+  if (text.includes('invalid login') || text.includes('invalid credentials')) {
+    return 'Email o contraseña incorrectos.';
+  }
+  if (text.includes('email not confirmed')) {
+    return 'La cuenta fue creada, pero Supabase está pidiendo confirmar el email. Desactivá Email confirmations en Supabase para este MVP.';
+  }
+  return message || 'No se pudo completar la operación.';
+}
+
+export async function signUpWithEmail(email: string, password: string): Promise<Session | null> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) throw new Error(normalizeAuthError(error.message));
+  if (!data.session) {
+    throw new Error(
+      'La cuenta fue creada, pero Supabase está pidiendo confirmar el email. Desactivá Email confirmations en Supabase para este MVP.'
+    );
+  }
+  return data.session;
+}
+
+export async function signInWithEmail(email: string, password: string): Promise<Session> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error || !data.session) throw new Error(normalizeAuthError(error?.message));
+  return data.session;
+}
+
+export async function signOut(): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.auth.signOut();
+  if (error) throw new Error(error.message);
+}
 
 export async function getCurrentSession(): Promise<Session | null> {
   const supabase = getSupabaseClient();
@@ -8,23 +47,15 @@ export async function getCurrentSession(): Promise<Session | null> {
   return data.session;
 }
 
-export async function ensureAnonymousSession(): Promise<Session> {
+export async function getCurrentUser(): Promise<User | null> {
   const supabase = getSupabaseClient();
-  const currentSession = await getCurrentSession();
-  if (currentSession) return currentSession;
-
-  const { data, error } = await supabase.auth.signInAnonymously();
-  if (error || !data.session) {
-    throw new Error(
-      error?.message ||
-        'No se pudo crear la identidad anónima. Activá Anonymous sign-ins en Supabase.'
-    );
-  }
-
-  return data.session;
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw new Error(error.message);
+  return data.user;
 }
 
-export async function getCurrentUserId(): Promise<string | null> {
-  const session = await getCurrentSession();
-  return session?.user.id ?? null;
+export function listenToAuthChanges(callback: (event: AuthChangeEvent, session: Session | null) => void): () => void {
+  const supabase = getSupabaseClient();
+  const { data } = supabase.auth.onAuthStateChange(callback);
+  return () => data.subscription.unsubscribe();
 }

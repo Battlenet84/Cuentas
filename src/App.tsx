@@ -3,6 +3,7 @@ import { CreateGroupForm } from './components/CreateGroupForm';
 import { GroupDetail } from './components/GroupDetail';
 import { GroupList } from './components/GroupList';
 import { JoinGroupCard } from './components/JoinGroupCard';
+import { AuthScreen } from './components/AuthScreen';
 import {
   assignSettlementCycleToExpenses,
   createExpense,
@@ -34,7 +35,7 @@ import {
   updateRemoteParticipant
 } from './data/supabaseStorage';
 import { subscribeToGroupChanges, type RealtimeStatus } from './data/realtime';
-import { ensureAnonymousSession } from './data/auth';
+import { getCurrentSession, listenToAuthChanges, signInWithEmail, signOut, signUpWithEmail } from './data/auth';
 import { getOpenExpenses } from './lib/calculations';
 import { createId, createShareToken } from './lib/ids';
 import { isSupabaseConfigured, supabaseConfigError } from './lib/supabase';
@@ -99,15 +100,22 @@ function App() {
     if (!isSupabaseConfigured) return;
 
     setAuthLoading(true);
-    ensureAnonymousSession()
+    getCurrentSession()
       .then((session) => {
-        setAuthUserId(session.user.id);
+        setAuthUserId(session?.user.id ?? null);
         setAuthError(null);
       })
       .catch(() => {
-        setAuthError('No se pudo crear la identidad anónima. Activá Anonymous sign-ins en Supabase.');
+        setAuthError('No se pudo cargar la sesión.');
       })
       .finally(() => setAuthLoading(false));
+
+    const cleanup = listenToAuthChanges((_event, session) => {
+      setAuthUserId(session?.user.id ?? null);
+      if (!session) setState(emptyState);
+    });
+
+    return cleanup;
   }, []);
 
   useEffect(() => {
@@ -135,13 +143,13 @@ function App() {
       return;
     }
 
-    if (authLoading || authError) return;
+    if (authLoading || authError || !authUserId) return;
 
     void refreshRemoteGroup(route.shareToken);
-  }, [authError, authLoading, route]);
+  }, [authError, authLoading, authUserId, route]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured || authLoading || authError || route.kind !== 'home') return;
+    if (!isSupabaseConfigured || authLoading || authError || !authUserId || route.kind !== 'home') return;
 
     setIsLoadingGroup(true);
     loadMyGroups()
@@ -151,10 +159,10 @@ function App() {
       })
       .catch(() => setRouteMessage('No se pudieron cargar tus grupos.'))
       .finally(() => setIsLoadingGroup(false));
-  }, [authError, authLoading, route.kind]);
+  }, [authError, authLoading, authUserId, route.kind]);
 
   useEffect(() => {
-    if (route.kind !== 'sharedGroup' || !isSupabaseConfigured || authLoading || authError) {
+    if (route.kind !== 'sharedGroup' || !isSupabaseConfigured || authLoading || authError || !authUserId) {
       setSyncStatus('idle');
       return;
     }
@@ -190,7 +198,7 @@ function App() {
       }
       cleanup();
     };
-  }, [authError, authLoading, route]);
+  }, [authError, authLoading, authUserId, route]);
 
   useEffect(() => {
     if (route.kind !== 'localGroup') return;
@@ -274,16 +282,35 @@ function App() {
     navigate({ kind: 'home' });
   }
 
-  async function handleCreateGroup(name: string) {
+  async function handleSignIn(email: string, password: string) {
+    const session = await signInWithEmail(email, password);
+    setAuthUserId(session.user.id);
+    setAuthError(null);
+  }
+
+  async function handleSignUp(email: string, password: string) {
+    const session = await signUpWithEmail(email, password);
+    setAuthUserId(session?.user.id ?? null);
+    setAuthError(null);
+  }
+
+  async function handleSignOut() {
+    await signOut();
+    setAuthUserId(null);
+    setState(emptyState);
+    navigate({ kind: 'home' }, true);
+  }
+
+  async function handleCreateGroup(input: { name: string; ownerParticipantName: string }) {
     if (isSupabaseConfigured) {
       if (!authUserId) {
-        setRouteMessage('No se pudo crear la identidad anónima.');
+        setRouteMessage('Iniciá sesión para crear grupos.');
         return;
       }
       setIsSaving(true);
       setDetailError(null);
       try {
-        const group = await createRemoteGroup(name);
+        const group = await createRemoteGroup(input);
         setState({ groups: [group], participants: [], expenses: [], settlementCycles: [] });
         navigate({ kind: 'sharedGroup', shareToken: group.shareToken ?? group.id });
       } catch {
@@ -296,12 +323,21 @@ function App() {
 
     const group = {
       id: createId('group'),
-      name,
+      name: input.name,
       createdAt: new Date().toISOString(),
       shareToken: createShareToken(),
       archivedAt: null
     };
-    persist((current) => createGroup(current, group));
+    persist((current) => {
+      const next = createGroup(current, group);
+      if (!input.ownerParticipantName) return next;
+      return createParticipant(next, {
+        id: createId('participant'),
+        groupId: group.id,
+        name: input.ownerParticipantName,
+        isActive: true
+      });
+    });
     openLocalGroup(group.id);
   }
 
@@ -494,6 +530,10 @@ function App() {
     );
   }
 
+  if (isSupabaseConfigured && !authUserId) {
+    return <AuthScreen onSignIn={handleSignIn} onSignUp={handleSignUp} />;
+  }
+
   if (isLoadingGroup) {
     return (
       <div className="min-h-screen bg-slate-50 px-4 py-6">
@@ -509,6 +549,7 @@ function App() {
       <JoinGroupCard
         group={selectedGroup}
         participants={state.participants}
+        claimedParticipantIds={state.claimedParticipantIds}
         onJoin={handleJoinGroup}
         onBack={openHome}
       />
@@ -540,6 +581,7 @@ function App() {
             currentMembership={state.currentMembership ?? null}
             members={groupMembers}
             onBack={openHome}
+            onSignOut={isSupabaseConfigured ? handleSignOut : undefined}
             onAddParticipant={(name, alias) => handleAddParticipant(selectedGroup.id, name, alias)}
             onUpdateParticipant={handleUpdateParticipant}
             onCreateExpense={handleCreateExpense}
@@ -580,6 +622,16 @@ function App() {
           </p>
         ) : null}
 
+        {isSupabaseConfigured ? (
+          <button
+            type="button"
+            onClick={() => void handleSignOut()}
+            className="self-start rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
+          >
+            Cerrar sesión
+          </button>
+        ) : null}
+
         {routeMessage ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
             <p>{routeMessage}</p>
@@ -591,7 +643,7 @@ function App() {
           </div>
         ) : null}
 
-        <CreateGroupForm onCreate={(name) => void handleCreateGroup(name)} />
+        <CreateGroupForm onCreate={(input) => void handleCreateGroup(input)} requiresOwnerName={isSupabaseConfigured} />
         {isSaving ? <p className="text-sm font-medium text-slate-600">Guardando cambios...</p> : null}
         {isSupabaseConfigured ? <h2 className="text-lg font-semibold text-slate-900">Mis grupos</h2> : null}
         <GroupList groups={state.groups} participants={state.participants} onOpenGroup={openLocalGroup} />
