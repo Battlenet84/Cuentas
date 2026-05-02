@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CreateGroupForm } from './components/CreateGroupForm';
 import { GroupDetail } from './components/GroupDetail';
 import { GroupList } from './components/GroupList';
+import { JoinGroupCard } from './components/JoinGroupCard';
 import {
   assignSettlementCycleToExpenses,
   createExpense,
@@ -21,11 +22,19 @@ import {
   createRemoteGroup,
   createRemoteParticipant,
   deleteRemoteExpense,
+  getGroupMembers,
+  joinGroupByToken,
   loadGroupByShareToken,
+  loadMyGroups,
+  regenerateGroupInviteToken,
+  revokeGroupMember,
+  type GroupMemberView,
+  updateMyGroupIdentity,
   updateRemoteExpense,
   updateRemoteParticipant
 } from './data/supabaseStorage';
 import { subscribeToGroupChanges, type RealtimeStatus } from './data/realtime';
+import { ensureAnonymousSession } from './data/auth';
 import { getOpenExpenses } from './lib/calculations';
 import { createId, createShareToken } from './lib/ids';
 import { isSupabaseConfigured, supabaseConfigError } from './lib/supabase';
@@ -62,6 +71,10 @@ function App() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [isLoadingGroup, setIsLoadingGroup] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [groupMembers, setGroupMembers] = useState<GroupMemberView[]>([]);
   const [syncStatus, setSyncStatus] = useState<RealtimeStatus>('idle');
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const realtimeRefreshTimeoutRef = useRef<number | null>(null);
@@ -81,6 +94,21 @@ function App() {
   useEffect(() => {
     if (!isSupabaseConfigured && route.kind !== 'sharedGroup') saveState(state);
   }, [route.kind, state]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    setAuthLoading(true);
+    ensureAnonymousSession()
+      .then((session) => {
+        setAuthUserId(session.user.id);
+        setAuthError(null);
+      })
+      .catch(() => {
+        setAuthError('No se pudo crear la identidad anónima. Activá Anonymous sign-ins en Supabase.');
+      })
+      .finally(() => setAuthLoading(false));
+  }, []);
 
   useEffect(() => {
     function handlePopState() {
@@ -107,11 +135,26 @@ function App() {
       return;
     }
 
+    if (authLoading || authError) return;
+
     void refreshRemoteGroup(route.shareToken);
-  }, [route]);
+  }, [authError, authLoading, route]);
 
   useEffect(() => {
-    if (route.kind !== 'sharedGroup' || !isSupabaseConfigured) {
+    if (!isSupabaseConfigured || authLoading || authError || route.kind !== 'home') return;
+
+    setIsLoadingGroup(true);
+    loadMyGroups()
+      .then((myState) => {
+        setState(myState);
+        setRouteMessage(null);
+      })
+      .catch(() => setRouteMessage('No se pudieron cargar tus grupos.'))
+      .finally(() => setIsLoadingGroup(false));
+  }, [authError, authLoading, route.kind]);
+
+  useEffect(() => {
+    if (route.kind !== 'sharedGroup' || !isSupabaseConfigured || authLoading || authError) {
       setSyncStatus('idle');
       return;
     }
@@ -147,7 +190,7 @@ function App() {
       }
       cleanup();
     };
-  }, [route]);
+  }, [authError, authLoading, route]);
 
   useEffect(() => {
     if (route.kind !== 'localGroup') return;
@@ -180,10 +223,21 @@ function App() {
       setRouteMessage(null);
       setLastSyncAt(new Date().toISOString());
       if (route.kind === 'sharedGroup') setSyncStatus('connected');
+      const group = remoteState.groups[0];
+      if (group?.shareToken && group.shareToken !== shareToken && remoteState.accessStatus === 'member') {
+        navigate({ kind: 'sharedGroup', shareToken: group.shareToken }, true);
+      }
+      if (group && remoteState.currentMembership?.role === 'owner' && remoteState.currentMembership.status === 'active') {
+        const members = await getGroupMembers(group.shareToken ?? shareToken);
+        setGroupMembers(members);
+      } else {
+        setGroupMembers([]);
+      }
     } catch {
       setDetailError('No se pudo cargar la información del grupo.');
       setRouteMessage('No encontramos este grupo.');
       setState({ groups: [], participants: [], expenses: [], settlementCycles: [] });
+      setGroupMembers([]);
       setSyncStatus('error');
     } finally {
       if (!options?.quiet) setIsLoadingGroup(false);
@@ -205,6 +259,13 @@ function App() {
   }
 
   function openLocalGroup(groupId: string) {
+    if (isSupabaseConfigured) {
+      const group = state.groups.find((item) => item.id === groupId);
+      if (group?.shareToken) {
+        navigate({ kind: 'sharedGroup', shareToken: group.shareToken });
+        return;
+      }
+    }
     navigate({ kind: 'localGroup', groupId });
   }
 
@@ -215,6 +276,10 @@ function App() {
 
   async function handleCreateGroup(name: string) {
     if (isSupabaseConfigured) {
+      if (!authUserId) {
+        setRouteMessage('No se pudo crear la identidad anónima.');
+        return;
+      }
       setIsSaving(true);
       setDetailError(null);
       try {
@@ -238,6 +303,66 @@ function App() {
     };
     persist((current) => createGroup(current, group));
     openLocalGroup(group.id);
+  }
+
+  async function handleJoinGroup(input: { participantId?: string | null; newParticipantName?: string; newParticipantAlias?: string }) {
+    if (route.kind !== 'sharedGroup') return;
+
+    await runRemoteOperation(
+      route.shareToken,
+      () => joinGroupByToken(route.shareToken, input).then(() => undefined),
+      'No se pudo entrar al grupo.'
+    );
+  }
+
+  async function handleChangeIdentity(participantId: string) {
+    if (route.kind !== 'sharedGroup') return;
+
+    await runRemoteOperation(
+      route.shareToken,
+      () => updateMyGroupIdentity(route.shareToken, participantId).then(() => undefined),
+      'No se pudo guardar tu identidad.'
+    );
+  }
+
+  async function handleCreateIdentityParticipant(name: string, alias?: string) {
+    if (route.kind !== 'sharedGroup') return;
+
+    await runRemoteOperation(
+      route.shareToken,
+      async () => {
+        const participant = await createRemoteParticipant(route.shareToken, { name, alias });
+        await updateMyGroupIdentity(route.shareToken, participant.id);
+      },
+      'No se pudo guardar tu identidad.'
+    );
+  }
+
+  async function handleRevokeMember(membershipId: string) {
+    if (route.kind !== 'sharedGroup') return;
+
+    await runRemoteOperation(
+      route.shareToken,
+      () => revokeGroupMember(route.shareToken, membershipId),
+      'No se pudo revocar el acceso.'
+    );
+  }
+
+  async function handleRegenerateInvite() {
+    if (route.kind !== 'sharedGroup') return;
+
+    setIsSaving(true);
+    try {
+      const group = await regenerateGroupInviteToken(route.shareToken);
+      const nextToken = group.shareToken ?? route.shareToken;
+      navigate({ kind: 'sharedGroup', shareToken: nextToken }, true);
+      await refreshRemoteGroup(nextToken);
+    } catch {
+      setDetailError('No se pudo regenerar el link.');
+      throw new Error('No se pudo regenerar el link.');
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function handleAddParticipant(groupId: string, name: string, alias?: string) {
@@ -349,6 +474,26 @@ function App() {
     });
   }
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 px-4 py-6">
+        <main className="mx-auto max-w-3xl rounded-lg bg-white p-5 shadow-sm">
+          <p className="font-medium text-slate-800">Preparando identidad anónima...</p>
+        </main>
+      </div>
+    );
+  }
+
+  if (authError) {
+    return (
+      <div className="min-h-screen bg-slate-50 px-4 py-6">
+        <main className="mx-auto max-w-3xl rounded-lg border border-red-200 bg-red-50 p-5 text-red-800">
+          <p className="font-medium">{authError}</p>
+        </main>
+      </div>
+    );
+  }
+
   if (isLoadingGroup) {
     return (
       <div className="min-h-screen bg-slate-50 px-4 py-6">
@@ -356,6 +501,30 @@ function App() {
           <p className="font-medium text-slate-800">Cargando grupo...</p>
         </main>
       </div>
+    );
+  }
+
+  if (route.kind === 'sharedGroup' && selectedGroup && state.accessStatus === 'requires_join') {
+    return (
+      <JoinGroupCard
+        group={selectedGroup}
+        participants={state.participants}
+        onJoin={handleJoinGroup}
+        onBack={openHome}
+      />
+    );
+  }
+
+  if (route.kind === 'sharedGroup' && state.accessStatus === 'revoked') {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center bg-slate-50 px-4 py-6">
+        <section className="rounded-lg border border-red-200 bg-red-50 p-5 text-red-800">
+          <h1 className="text-xl font-semibold">Tu acceso a este grupo fue revocado.</h1>
+          <button type="button" onClick={openHome} className="mt-4 font-semibold text-red-900">
+            Volver al inicio
+          </button>
+        </section>
+      </main>
     );
   }
 
@@ -368,6 +537,8 @@ function App() {
             participants={state.participants}
             expenses={state.expenses}
             settlementCycles={state.settlementCycles}
+            currentMembership={state.currentMembership ?? null}
+            members={groupMembers}
             onBack={openHome}
             onAddParticipant={(name, alias) => handleAddParticipant(selectedGroup.id, name, alias)}
             onUpdateParticipant={handleUpdateParticipant}
@@ -377,6 +548,10 @@ function App() {
             onCloseOpenExpenses={() => handleCloseOpenExpenses(selectedGroup.id)}
             onRetry={route.kind === 'sharedGroup' ? () => refreshRemoteGroup(route.shareToken) : undefined}
             onManualRefresh={route.kind === 'sharedGroup' ? () => refreshRemoteGroup(route.shareToken, { quiet: true }) : undefined}
+            onChangeIdentity={route.kind === 'sharedGroup' ? handleChangeIdentity : undefined}
+            onCreateIdentityParticipant={route.kind === 'sharedGroup' ? handleCreateIdentityParticipant : undefined}
+            onRevokeMember={route.kind === 'sharedGroup' ? handleRevokeMember : undefined}
+            onRegenerateInvite={route.kind === 'sharedGroup' ? handleRegenerateInvite : undefined}
             errorMessage={detailError}
             isSaving={isSaving}
             useSharedLink={route.kind === 'sharedGroup'}
@@ -418,6 +593,7 @@ function App() {
 
         <CreateGroupForm onCreate={(name) => void handleCreateGroup(name)} />
         {isSaving ? <p className="text-sm font-medium text-slate-600">Guardando cambios...</p> : null}
+        {isSupabaseConfigured ? <h2 className="text-lg font-semibold text-slate-900">Mis grupos</h2> : null}
         <GroupList groups={state.groups} participants={state.participants} onOpenGroup={openLocalGroup} />
       </main>
     </div>

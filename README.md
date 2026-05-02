@@ -54,6 +54,7 @@ Si faltan estas variables, la app muestra un aviso y funciona en modo local con 
    - Enable Data API: ON
    - Automatically expose new tables and functions: OFF
    - Enable automatic RLS: ON
+   - Authentication > Providers > Anonymous sign-ins: ON
 3. Abrir SQL Editor.
 4. Ejecutar completo el archivo `supabase/schema.sql`.
 5. Copiar Project URL.
@@ -61,7 +62,7 @@ Si faltan estas variables, la app muestra un aviso y funciona en modo local con 
 7. Completar `.env.local`.
 8. Reiniciar `npm run dev`.
 
-El SQL crea tablas con RLS activado y sin policies abiertas. El acceso anonimo pasa por RPC `SECURITY DEFINER` usando `share_token`.
+El SQL crea tablas con RLS activado y sin policies abiertas. El acceso anonimo pasa por RPC `SECURITY DEFINER` usando `share_token` y `auth.uid()`.
 
 ## Vercel
 
@@ -118,9 +119,22 @@ Si el canal no conecta, la app no se rompe. El boton "Actualizar" queda como fal
 
 ## Seguridad actual
 
-Cualquier persona con el link puede ver y editar los gastos del grupo. Esta version no tiene login todavia.
+Cualquier persona con el link puede unirse al grupo mientras el link sea valido. Esta version no tiene login real todavia.
 
 No se usa `service_role` en frontend. No hay llaves secretas en el codigo.
+
+## Identidad anonima y membresias
+
+La app usa Supabase Anonymous Auth. Cada navegador, PWA o celular recibe un usuario anonimo propio.
+
+- "Mis grupos" sale de `group_memberships` activas.
+- El creador del grupo queda como `owner`.
+- Al entrar por `/g/:shareToken`, la persona elige quien es en ese grupo o crea un participante nuevo.
+- El owner puede revocar miembros.
+- El owner puede regenerar el link de invitacion.
+- Si alguien borra datos del navegador o reinstala la PWA, puede perder esa identidad anonima.
+
+Esto no reemplaza login real. Es una identidad por dispositivo.
 
 ## Navegacion
 
@@ -144,6 +158,7 @@ Los montos se guardan como centavos y se formatean en `src/lib/money.ts`.
 
 - Supabase: `src/data/supabaseStorage.ts`
 - Realtime Broadcast: `src/data/realtime.ts`
+- Anonymous Auth: `src/data/auth.ts`
 - Fallback local: `src/data/storage.ts`
 - Cliente Supabase: `src/lib/supabase.ts`
 - SQL: `supabase/schema.sql`
@@ -170,9 +185,14 @@ Para probar:
 ## Mejoras futuras
 
 - Login.
+- Login real con email, Google u otro proveedor.
 - Permisos por grupo.
 - Canales privados.
 - Presencia.
 - Historial de cambios.
 - Confirmacion de pagos.
 - Invitaciones con roles.
+- Transferir grupos entre dispositivos.
+- Multiples owners.
+- Aprobacion manual de miembros.
+- Links de invitacion de un solo uso.

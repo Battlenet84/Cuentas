@@ -7,6 +7,7 @@ type ExpenseFormProps = {
   groupId: string;
   participants: Participant[];
   expense?: Expense | null;
+  defaultPaidByParticipantId?: string | null;
   onCreateExpense: (expense: Omit<Expense, 'id' | 'createdAt'>) => void | Promise<void>;
   onUpdateExpense?: (expense: Expense) => void | Promise<void>;
   onCancel?: () => void;
@@ -16,6 +17,7 @@ export function ExpenseForm({
   groupId,
   participants,
   expense,
+  defaultPaidByParticipantId,
   onCreateExpense,
   onUpdateExpense,
   onCancel
@@ -48,7 +50,7 @@ export function ExpenseForm({
     if (!expense) {
       setTitle('');
       setAmount('');
-      setPaidByParticipantId('');
+      setPaidByParticipantId(defaultPaidByParticipantId ?? '');
       setSplitParticipantIds([]);
       setDate(todayInputValue());
       setError(null);
@@ -61,12 +63,12 @@ export function ExpenseForm({
     setSplitParticipantIds(expense.splitParticipantIds);
     setDate(expense.date);
     setError(null);
-  }, [expense]);
+  }, [defaultPaidByParticipantId, expense]);
 
   function resetForm() {
     setTitle('');
     setAmount('');
-    setPaidByParticipantId('');
+    setPaidByParticipantId(defaultPaidByParticipantId ?? '');
     setSplitParticipantIds([]);
     setDate(todayInputValue());
     setError(null);

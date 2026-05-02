@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import type { Expense, Group, Participant, SettlementCycle } from '../types';
+import type { Expense, Group, GroupMembership, Participant, SettlementCycle } from '../types';
+import type { GroupMemberView } from '../data/supabaseStorage';
 import type { RealtimeStatus } from '../data/realtime';
 import { calculateBalances, getOpenExpenses, simplifySettlements } from '../lib/calculations';
 import { formatARS } from '../lib/money';
@@ -9,12 +10,16 @@ import { ExpenseList } from './ExpenseList';
 import { ParticipantsManager } from './ParticipantsManager';
 import { SettlementCyclesList } from './SettlementCyclesList';
 import { SettlementList } from './SettlementList';
+import { IdentityCard } from './IdentityCard';
+import { MembersManager } from './MembersManager';
 
 type GroupDetailProps = {
   group: Group;
   participants: Participant[];
   expenses: Expense[];
   settlementCycles: SettlementCycle[];
+  currentMembership?: GroupMembership | null;
+  members?: GroupMemberView[];
   onBack: () => void;
   onAddParticipant: (name: string, alias?: string) => void | Promise<void>;
   onUpdateParticipant: (participant: Participant) => void | Promise<void>;
@@ -24,6 +29,10 @@ type GroupDetailProps = {
   onCloseOpenExpenses: () => void | Promise<void>;
   onRetry?: () => void | Promise<void>;
   onManualRefresh?: () => void | Promise<void>;
+  onChangeIdentity?: (participantId: string) => Promise<void>;
+  onCreateIdentityParticipant?: (name: string, alias?: string) => Promise<void>;
+  onRevokeMember?: (membershipId: string) => Promise<void>;
+  onRegenerateInvite?: () => Promise<void>;
   errorMessage?: string | null;
   isSaving?: boolean;
   useSharedLink?: boolean;
@@ -36,6 +45,8 @@ export function GroupDetail({
   participants,
   expenses,
   settlementCycles,
+  currentMembership,
+  members = [],
   onBack,
   onAddParticipant,
   onUpdateParticipant,
@@ -45,6 +56,10 @@ export function GroupDetail({
   onCloseOpenExpenses,
   onRetry,
   onManualRefresh,
+  onChangeIdentity,
+  onCreateIdentityParticipant,
+  onRevokeMember,
+  onRegenerateInvite,
   errorMessage,
   isSaving = false,
   useSharedLink = false,
@@ -57,6 +72,7 @@ export function GroupDetail({
   const groupParticipants = participants.filter((participant) => participant.groupId === group.id);
   const groupExpenses = expenses.filter((expense) => expense.groupId === group.id);
   const groupCycles = settlementCycles.filter((cycle) => cycle.groupId === group.id);
+  const isOwner = currentMembership?.role === 'owner' && currentMembership.status === 'active';
   const openExpenses = getOpenExpenses(groupExpenses);
   const totalOpenCents = openExpenses.reduce((total, expense) => total + expense.amountCents, 0);
 
@@ -150,6 +166,7 @@ export function GroupDetail({
       expense={editingExpense}
       onCreateExpense={onCreateExpense}
       onUpdateExpense={onUpdateExpense}
+      defaultPaidByParticipantId={currentMembership?.participantId ?? null}
       onCancel={isExpensePanelOpen ? closeExpensePanel : undefined}
     />
   );
@@ -229,6 +246,14 @@ export function GroupDetail({
       {isSaving ? <p className="text-sm font-medium text-slate-600">Guardando cambios...</p> : null}
 
       <div className="space-y-5 lg:hidden">
+        {currentMembership && onChangeIdentity && onCreateIdentityParticipant ? (
+          <IdentityCard
+            membership={currentMembership}
+            participants={groupParticipants}
+            onChangeIdentity={onChangeIdentity}
+            onCreateParticipant={onCreateIdentityParticipant}
+          />
+        ) : null}
         <SettlementList settlements={settlements} participants={groupParticipants} />
         <BalanceSummary balances={balances} participants={groupParticipants} />
         <ExpenseList
@@ -244,6 +269,14 @@ export function GroupDetail({
           onAddParticipant={onAddParticipant}
           onUpdateParticipant={onUpdateParticipant}
         />
+        {isOwner && onRevokeMember && onRegenerateInvite ? (
+          <MembersManager
+            members={members}
+            currentMembership={currentMembership ?? null}
+            onRevokeMember={onRevokeMember}
+            onRegenerateInvite={onRegenerateInvite}
+          />
+        ) : null}
         <SettlementCyclesList cycles={groupCycles} expenses={groupExpenses} />
       </div>
 
@@ -260,6 +293,14 @@ export function GroupDetail({
         </main>
 
         <aside className="space-y-5">
+          {currentMembership && onChangeIdentity && onCreateIdentityParticipant ? (
+            <IdentityCard
+              membership={currentMembership}
+              participants={groupParticipants}
+              onChangeIdentity={onChangeIdentity}
+              onCreateParticipant={onCreateIdentityParticipant}
+            />
+          ) : null}
           <ParticipantsManager
             groupId={group.id}
             participants={participants}
@@ -268,6 +309,14 @@ export function GroupDetail({
             onUpdateParticipant={onUpdateParticipant}
           />
           {expenseForm}
+          {isOwner && onRevokeMember && onRegenerateInvite ? (
+            <MembersManager
+              members={members}
+              currentMembership={currentMembership ?? null}
+              onRevokeMember={onRevokeMember}
+              onRegenerateInvite={onRegenerateInvite}
+            />
+          ) : null}
           <SettlementCyclesList cycles={groupCycles} expenses={groupExpenses} />
         </aside>
       </div>

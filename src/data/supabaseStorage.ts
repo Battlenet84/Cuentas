@@ -1,4 +1,4 @@
-import type { AppState, Expense, Group, Participant, SettlementCycle } from '../types';
+import type { AppState, Expense, Group, GroupDataAccess, GroupMembership, Participant, SettlementCycle } from '../types';
 import { getSupabaseClient } from '../lib/supabase';
 import { createShareToken } from '../lib/ids';
 
@@ -38,11 +38,50 @@ type RemoteSettlementCycle = {
   closed_at: string;
 };
 
+type RemoteMembership = {
+  id: string;
+  group_id: string;
+  participant_id: string | null;
+  auth_user_id: string;
+  role: 'owner' | 'member';
+  status: 'active' | 'revoked';
+  joined_at: string;
+  last_seen_at: string;
+};
+
+export type GroupMemberView = GroupMembership & {
+  participantName: string | null;
+  participantAlias: string | null;
+};
+
+type RemoteMemberView = RemoteMembership & {
+  participant_name: string | null;
+  participant_alias: string | null;
+};
+
 type RemoteGroupData = {
   group: RemoteGroup;
-  participants: RemoteParticipant[];
-  expenses: RemoteExpense[];
-  settlementCycles: RemoteSettlementCycle[];
+  participants?: RemoteParticipant[];
+  expenses?: RemoteExpense[];
+  settlementCycles?: RemoteSettlementCycle[];
+  memberships?: RemoteMembership[];
+  currentMembership?: RemoteMembership | null;
+  accessStatus?: GroupDataAccess;
+  requiresJoin?: boolean;
+  accessRevoked?: boolean;
+};
+
+type RemoteMyGroup = {
+  group: RemoteGroup;
+  membership: RemoteMembership;
+  participant: RemoteParticipant | null;
+  role: 'owner' | 'member';
+  last_seen_at: string;
+};
+
+type JoinResult = {
+  membership: RemoteMembership;
+  participant: RemoteParticipant | null;
 };
 
 function mapGroup(group: RemoteGroup): Group {
@@ -88,12 +127,51 @@ function mapSettlementCycle(cycle: RemoteSettlementCycle): SettlementCycle {
   };
 }
 
+function mapMembership(membership: RemoteMembership): GroupMembership {
+  return {
+    id: membership.id,
+    groupId: membership.group_id,
+    participantId: membership.participant_id,
+    authUserId: membership.auth_user_id,
+    role: membership.role,
+    status: membership.status,
+    joinedAt: membership.joined_at,
+    lastSeenAt: membership.last_seen_at
+  };
+}
+
+function mapMemberView(member: RemoteMemberView): GroupMemberView {
+  return {
+    ...mapMembership(member),
+    participantName: member.participant_name,
+    participantAlias: member.participant_alias
+  };
+}
+
+function emptyRemoteState(): AppState {
+  return {
+    groups: [],
+    participants: [],
+    expenses: [],
+    settlementCycles: [],
+    memberships: [],
+    currentMembership: null,
+    accessStatus: 'requires_join'
+  };
+}
+
 function mapGroupData(data: RemoteGroupData): AppState {
+  const accessStatus =
+    data.accessStatus ?? (data.accessRevoked ? 'revoked' : data.requiresJoin ? 'requires_join' : 'member');
+
   return {
     groups: [mapGroup(data.group)],
-    participants: data.participants.map(mapParticipant),
-    expenses: data.expenses.map(mapExpense),
-    settlementCycles: data.settlementCycles.map(mapSettlementCycle)
+    participants: (data.participants ?? []).map(mapParticipant),
+    expenses: (data.expenses ?? []).map(mapExpense),
+    settlementCycles: (data.settlementCycles ?? []).map(mapSettlementCycle),
+    memberships: (data.memberships ?? []).map(mapMembership),
+    currentMembership: data.currentMembership ? mapMembership(data.currentMembership) : null,
+    accessStatus
   };
 }
 
@@ -101,6 +179,19 @@ function assertData<T>(data: T | null, error: { message: string } | null, fallba
   if (error) throw new Error(error.message || fallbackMessage);
   if (!data) throw new Error(fallbackMessage);
   return data;
+}
+
+export async function loadMyGroups(): Promise<AppState> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('get_my_groups');
+  const rows = assertData((data ?? []) as RemoteMyGroup[], error, 'No se pudieron cargar tus grupos.');
+
+  return {
+    ...emptyRemoteState(),
+    groups: rows.map((row) => mapGroup(row.group)),
+    memberships: rows.map((row) => mapMembership(row.membership)),
+    accessStatus: 'member'
+  };
 }
 
 export async function loadGroupByShareToken(shareToken: string): Promise<AppState> {
@@ -118,6 +209,35 @@ export async function createRemoteGroup(name: string): Promise<Group> {
   });
 
   return mapGroup(assertData(data as RemoteGroup | null, error, 'No se pudo crear el grupo.'));
+}
+
+export async function joinGroupByToken(
+  shareToken: string,
+  input: { participantId?: string | null; newParticipantName?: string; newParticipantAlias?: string }
+): Promise<{ membership: GroupMembership; participant: Participant | null }> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('join_group_by_token', {
+    p_share_token: shareToken,
+    p_participant_id: input.participantId ?? null,
+    p_new_participant_name: input.newParticipantName ?? null,
+    p_new_participant_alias: input.newParticipantAlias ?? null
+  });
+  const result = assertData(data as JoinResult | null, error, 'No se pudo entrar al grupo.');
+
+  return {
+    membership: mapMembership(result.membership),
+    participant: result.participant ? mapParticipant(result.participant) : null
+  };
+}
+
+export async function updateMyGroupIdentity(shareToken: string, participantId: string): Promise<GroupMembership> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('update_my_group_identity', {
+    p_share_token: shareToken,
+    p_participant_id: participantId
+  });
+
+  return mapMembership(assertData(data as RemoteMembership | null, error, 'No se pudo guardar tu identidad.'));
 }
 
 export async function createRemoteParticipant(
@@ -196,4 +316,31 @@ export async function closeRemoteSettlementCycle(shareToken: string): Promise<Se
   });
 
   return mapSettlementCycle(assertData(data as RemoteSettlementCycle | null, error, 'No se pudo cerrar el período.'));
+}
+
+export async function getGroupMembers(shareToken: string): Promise<GroupMemberView[]> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('get_group_members_by_token', { p_share_token: shareToken });
+  const rows = assertData((data ?? []) as RemoteMemberView[], error, 'No se pudieron cargar los miembros.');
+  return rows.map(mapMemberView);
+}
+
+export async function revokeGroupMember(shareToken: string, membershipId: string): Promise<void> {
+  const client = getSupabaseClient();
+  const { error } = await client.rpc('revoke_group_member_by_token', {
+    p_share_token: shareToken,
+    p_membership_id: membershipId
+  });
+
+  if (error) throw new Error(error.message || 'No se pudo revocar el miembro.');
+}
+
+export async function regenerateGroupInviteToken(shareToken: string): Promise<Group> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('regenerate_group_invite_token', {
+    p_share_token: shareToken,
+    p_new_share_token: createShareToken()
+  });
+
+  return mapGroup(assertData(data as RemoteGroup | null, error, 'No se pudo regenerar el link.'));
 }

@@ -46,9 +46,25 @@ export type Settlement = {
   amountCents: number;
 };
 
+export type GroupMembership = {
+  id: string;
+  groupId: string;
+  participantId: string | null;
+  authUserId: string;
+  role: 'owner' | 'member';
+  status: 'active' | 'revoked';
+  joinedAt: string;
+  lastSeenAt: string;
+};
+
+export type GroupDataAccess = 'member' | 'requires_join' | 'revoked';
+
 export type AppState = {
   groups: Group[];
   participants: Participant[];
   expenses: Expense[];
   settlementCycles: SettlementCycle[];
+  memberships?: GroupMembership[];
+  currentMembership?: GroupMembership | null;
+  accessStatus?: GroupDataAccess;
 };
