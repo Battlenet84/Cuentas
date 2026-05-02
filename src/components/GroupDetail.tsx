@@ -12,6 +12,8 @@ import { SettlementCyclesList } from './SettlementCyclesList';
 import { SettlementList } from './SettlementList';
 import { IdentityCard } from './IdentityCard';
 import { MembersManager } from './MembersManager';
+import { EmptyState } from './EmptyState';
+import { GroupBottomNav, type GroupTab } from './GroupBottomNav';
 
 type GroupDetailProps = {
   group: Group;
@@ -41,6 +43,13 @@ type GroupDetailProps = {
   lastSyncAt?: string | null;
 };
 
+const desktopTabs: Array<{ id: GroupTab; label: string }> = [
+  { id: 'summary', label: 'Resumen' },
+  { id: 'expenses', label: 'Gastos' },
+  { id: 'participants', label: 'Participantes' },
+  { id: 'more', label: 'Más' }
+];
+
 export function GroupDetail({
   group,
   participants,
@@ -68,6 +77,7 @@ export function GroupDetail({
   syncStatus = 'idle',
   lastSyncAt
 }: GroupDetailProps) {
+  const [activeTab, setActiveTab] = useState<GroupTab>('summary');
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [isExpensePanelOpen, setIsExpensePanelOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -90,10 +100,8 @@ export function GroupDetail({
 
   function buildWhatsAppSummary(): string {
     const lines = [`Resumen de "${group.name}"`, '', `Total abierto: ${formatARS(totalOpenCents)}`, '', 'Para saldar:'];
-
-    if (settlements.length === 0) {
-      lines.push('Todo está saldado.');
-    } else {
+    if (settlements.length === 0) lines.push('Todo está saldado.');
+    else {
       for (const settlement of settlements) {
         lines.push(
           `- ${participantName(settlement.fromParticipantId)} le paga ${formatARS(settlement.amountCents)} a ${participantName(
@@ -102,7 +110,6 @@ export function GroupDetail({
         );
       }
     }
-
     return lines.join('\n');
   }
 
@@ -173,49 +180,80 @@ export function GroupDetail({
     />
   );
 
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <button type="button" onClick={onBack} className="text-sm font-medium text-teal-800">
-          Volver a grupos
-        </button>
-        {onSignOut ? (
-          <button type="button" onClick={onSignOut} className="text-sm font-medium text-slate-600">
-            Cerrar sesión
-          </button>
-        ) : null}
-      </div>
+  const identityCard =
+    currentMembership && onChangeIdentity && onCreateIdentityParticipant ? (
+      <IdentityCard
+        membership={currentMembership}
+        participants={groupParticipants}
+        onChangeIdentity={onChangeIdentity}
+        onCreateParticipant={onCreateIdentityParticipant}
+      />
+    ) : null;
 
-      <header className="rounded-lg bg-slate-900 p-5 text-white">
-        <p className="text-sm text-slate-300">Grupo</p>
-        <h1 className="mt-1 text-2xl font-semibold">{group.name}</h1>
-        <p className="mt-3 text-sm text-slate-200">
-          {groupParticipants.length} participantes · {groupExpenses.length} gastos · Abierto {formatARS(totalOpenCents)}
-        </p>
-      </header>
+  const membersManager =
+    isOwner && onRevokeMember && onRegenerateInvite ? (
+      <MembersManager
+        members={members}
+        currentMembership={currentMembership ?? null}
+        onRevokeMember={onRevokeMember}
+        onRegenerateInvite={onRegenerateInvite}
+      />
+    ) : null;
 
-      <div className="grid gap-3">
-        <button
-          type="button"
-          onClick={openCreateExpensePanel}
-          className="min-h-12 rounded-md bg-teal-700 px-4 text-base font-semibold text-white shadow-sm hover:bg-teal-800 lg:hidden"
-        >
-          Agregar gasto
-        </button>
-
-        <div className="grid gap-2 sm:grid-cols-3">
+  function renderTabContent() {
+    if (activeTab === 'summary') {
+      return (
+        <div className="space-y-5">
+          <section className="rounded-lg border border-slate-200 bg-white p-4">
+            <p className="text-sm text-slate-500">Total abierto</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-950">{formatARS(totalOpenCents)}</p>
+          </section>
+          {openExpenses.length === 0 ? (
+            <EmptyState title="Todavía no hay gastos abiertos." />
+          ) : null}
+          <SettlementList settlements={settlements} participants={groupParticipants} />
+          <BalanceSummary balances={balances} participants={groupParticipants} />
           <button
             type="button"
             onClick={handleCopySummary}
-            className="min-h-11 rounded-md border border-slate-300 bg-white px-4 font-medium text-slate-800"
+            className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-4 font-medium text-slate-800"
           >
-            Copiar para WhatsApp
+            Copiar resumen
           </button>
-          <button
-            type="button"
-            onClick={handleCopyGroupLink}
-            className="min-h-11 rounded-md border border-slate-300 bg-white px-4 font-medium text-slate-800"
-          >
+        </div>
+      );
+    }
+
+    if (activeTab === 'expenses') {
+      return (
+        <ExpenseList
+          expenses={groupExpenses}
+          participants={groupParticipants}
+          onEditExpense={openEditExpensePanel}
+          onDeleteExpense={onDeleteExpense}
+        />
+      );
+    }
+
+    if (activeTab === 'participants') {
+      return (
+        <div className="space-y-5">
+          {identityCard}
+          <ParticipantsManager
+            groupId={group.id}
+            participants={participants}
+            expenses={expenses}
+            onAddParticipant={onAddParticipant}
+            onUpdateParticipant={onUpdateParticipant}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-5">
+        <section className="grid gap-2 rounded-lg border border-slate-200 bg-white p-4">
+          <button type="button" onClick={handleCopyGroupLink} className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800">
             Copiar link del grupo
           </button>
           <button
@@ -226,109 +264,92 @@ export function GroupDetail({
           >
             Cerrar período
           </button>
-        </div>
-      </div>
-      {copyStatus ? <p className="text-sm text-slate-600">{copyStatus}</p> : null}
-      <p className="text-sm text-slate-500">
-        Cualquier persona con este link puede ver y editar los gastos del grupo.
-      </p>
-      {onManualRefresh ? (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-          <span>{syncLabel()}</span>
-          <button type="button" onClick={onManualRefresh} className="font-semibold text-teal-800">
-            Actualizar
+          <button type="button" onClick={onBack} className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800">
+            Volver a Mis grupos
           </button>
-        </div>
-      ) : null}
-
-      {errorMessage ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <p>{errorMessage}</p>
-          {onRetry ? (
-            <button type="button" onClick={onRetry} className="mt-2 font-semibold text-red-800">
-              Reintentar
+          {onSignOut ? (
+            <button type="button" onClick={onSignOut} className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800">
+              Cerrar sesión
             </button>
           ) : null}
-        </div>
-      ) : null}
-
-      {isSaving ? <p className="text-sm font-medium text-slate-600">Guardando cambios...</p> : null}
-
-      <div className="space-y-5 lg:hidden">
-        {currentMembership && onChangeIdentity && onCreateIdentityParticipant ? (
-          <IdentityCard
-            membership={currentMembership}
-            participants={groupParticipants}
-            onChangeIdentity={onChangeIdentity}
-            onCreateParticipant={onCreateIdentityParticipant}
-          />
-        ) : null}
-        <SettlementList settlements={settlements} participants={groupParticipants} />
-        <BalanceSummary balances={balances} participants={groupParticipants} />
-        <ExpenseList
-          expenses={groupExpenses}
-          participants={groupParticipants}
-          onEditExpense={openEditExpensePanel}
-          onDeleteExpense={onDeleteExpense}
-        />
-        <ParticipantsManager
-          groupId={group.id}
-          participants={participants}
-          expenses={expenses}
-          onAddParticipant={onAddParticipant}
-          onUpdateParticipant={onUpdateParticipant}
-        />
-        {isOwner && onRevokeMember && onRegenerateInvite ? (
-          <MembersManager
-            members={members}
-            currentMembership={currentMembership ?? null}
-            onRevokeMember={onRevokeMember}
-            onRegenerateInvite={onRegenerateInvite}
-          />
-        ) : null}
+        </section>
+        {membersManager}
         <SettlementCyclesList cycles={groupCycles} expenses={groupExpenses} />
       </div>
+    );
+  }
 
-      <div className="hidden gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_360px]">
-        <main className="space-y-5">
-          <SettlementList settlements={settlements} participants={groupParticipants} />
-          <BalanceSummary balances={balances} participants={groupParticipants} />
-          <ExpenseList
-            expenses={groupExpenses}
-            participants={groupParticipants}
-            onEditExpense={openEditExpensePanel}
-            onDeleteExpense={onDeleteExpense}
-          />
-        </main>
+  return (
+    <div className="min-h-screen pb-24 md:pb-0">
+      <div className="space-y-5">
+        <header className="rounded-lg bg-slate-900 p-4 text-white md:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs text-slate-300">Grupo</p>
+              <h1 className="mt-1 text-xl font-semibold md:text-2xl">{group.name}</h1>
+              <p className="mt-2 text-xs text-slate-300">{syncLabel()}</p>
+            </div>
+            <button type="button" onClick={handleCopyGroupLink} className="text-xs font-semibold text-teal-100">
+              Copiar link
+            </button>
+          </div>
+          <p className="mt-3 text-sm text-slate-200">
+            {groupParticipants.length} participantes · {groupExpenses.length} gastos · Abierto {formatARS(totalOpenCents)}
+          </p>
+        </header>
 
-        <aside className="space-y-5">
-          {currentMembership && onChangeIdentity && onCreateIdentityParticipant ? (
-            <IdentityCard
-              membership={currentMembership}
-              participants={groupParticipants}
-              onChangeIdentity={onChangeIdentity}
-              onCreateParticipant={onCreateIdentityParticipant}
-            />
-          ) : null}
-          <ParticipantsManager
-            groupId={group.id}
-            participants={participants}
-            expenses={expenses}
-            onAddParticipant={onAddParticipant}
-            onUpdateParticipant={onUpdateParticipant}
-          />
-          {expenseForm}
-          {isOwner && onRevokeMember && onRegenerateInvite ? (
-            <MembersManager
-              members={members}
-              currentMembership={currentMembership ?? null}
-              onRevokeMember={onRevokeMember}
-              onRegenerateInvite={onRegenerateInvite}
-            />
-          ) : null}
-          <SettlementCyclesList cycles={groupCycles} expenses={groupExpenses} />
-        </aside>
+        <div className="hidden items-center justify-between gap-3 md:flex">
+          <div className="flex gap-2 rounded-lg bg-white p-1 shadow-sm">
+            {desktopTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`min-h-10 rounded-md px-4 text-sm font-semibold ${
+                  activeTab === tab.id ? 'bg-teal-700 text-white' : 'text-slate-600'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={openCreateExpensePanel}
+            className="min-h-10 rounded-md bg-teal-700 px-4 font-semibold text-white"
+          >
+            Agregar gasto
+          </button>
+        </div>
+
+        {copyStatus ? <p className="text-sm text-slate-600">{copyStatus}</p> : null}
+
+        {onManualRefresh ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+            <span>{syncLabel()}</span>
+            <button type="button" onClick={onManualRefresh} className="font-semibold text-teal-800">
+              Actualizar
+            </button>
+          </div>
+        ) : null}
+
+        {errorMessage ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <p>{errorMessage}</p>
+            {onRetry ? (
+              <button type="button" onClick={onRetry} className="mt-2 font-semibold text-red-800">
+                Reintentar
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {isSaving ? <p className="text-sm font-medium text-slate-600">Guardando cambios...</p> : null}
+
+        <main>{renderTabContent()}</main>
       </div>
+
+      <GroupBottomNav activeTab={activeTab} onTabChange={setActiveTab} onAddExpense={openCreateExpensePanel} />
 
       {isExpensePanelOpen ? (
         <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-4">
