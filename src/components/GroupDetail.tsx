@@ -11,15 +11,14 @@ import {
 } from '../lib/calculations';
 import { formatARS } from '../lib/money';
 import { ExpenseForm } from './ExpenseForm';
-import { ExpenseList } from './ExpenseList';
 import { ParticipantsManager } from './ParticipantsManager';
-import { SettlementCyclesList } from './SettlementCyclesList';
 import { SettlementList } from './SettlementList';
 import { IdentityCard } from './IdentityCard';
 import { MembersManager } from './MembersManager';
 import { EmptyState } from './EmptyState';
 import { GroupBottomActionBar } from './GroupBottomActionBar';
 import { GroupTabs, type GroupTab } from './GroupTabs';
+import { GroupMovements } from './GroupMovements';
 
 type GroupDetailProps = {
   group: Group;
@@ -93,7 +92,6 @@ export function GroupDetail({
   const groupExpenses = expenses.filter((expense) => expense.groupId === group.id);
   const groupCycles = settlementCycles.filter((cycle) => cycle.groupId === group.id);
   const openSettlementPayments = getOpenSettlementPayments(settlementPayments.filter((payment) => payment.groupId === group.id));
-  const voidedSettlementPayments = settlementPayments.filter((payment) => payment.groupId === group.id && payment.voidedAt);
   const isOwner = currentMembership?.role === 'owner' && currentMembership.status === 'active';
   const openExpenses = getOpenExpenses(groupExpenses);
   const totalOpenCents = openExpenses.reduce((total, expense) => total + expense.amountCents, 0);
@@ -235,59 +233,6 @@ export function GroupDetail({
       />
     ) : null;
 
-  function renderPayments() {
-    return (
-      <>
-        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="text-base font-semibold text-slate-900">Pagos registrados</h2>
-          {openSettlementPayments.length === 0 ? (
-            <p className="text-sm text-slate-500">Todavia no hay pagos registrados.</p>
-          ) : (
-            <div className="grid gap-2">
-              {openSettlementPayments
-                .slice()
-                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                .map((payment) => (
-                  <div key={payment.id} className="rounded-md border border-slate-200 p-3 text-sm text-slate-700">
-                    <p>
-                      <span className="font-semibold">{participantName(payment.fromParticipantId)}</span> le pago{' '}
-                      <span className="font-semibold">{formatARS(payment.amountCents)}</span> a{' '}
-                      <span className="font-semibold">{participantName(payment.toParticipantId)}</span>
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">{new Date(payment.createdAt).toLocaleDateString('es-AR')}</p>
-                    {onVoidSettlementPayment ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleVoidPayment(payment.id)}
-                        className="mt-3 rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700"
-                      >
-                        Anular
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-            </div>
-          )}
-        </section>
-
-        {voidedSettlementPayments.length > 0 ? (
-          <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="text-base font-semibold text-slate-900">Pagos anulados</h2>
-            {voidedSettlementPayments
-              .slice()
-              .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-              .map((payment) => (
-                <div key={payment.id} className="rounded-md border border-slate-200 p-3 text-sm text-slate-500">
-                  {participantName(payment.fromParticipantId)} le habia pagado {formatARS(payment.amountCents)} a{' '}
-                  {participantName(payment.toParticipantId)}
-                </div>
-              ))}
-          </section>
-        ) : null}
-      </>
-    );
-  }
-
   function renderTabContent() {
     if (activeTab === 'summary') {
       return (
@@ -320,19 +265,15 @@ export function GroupDetail({
 
     if (activeTab === 'movements') {
       return (
-        <div className="space-y-5">
-          {groupExpenses.length === 0 && openSettlementPayments.length === 0 && groupCycles.length === 0 ? (
-            <EmptyState title="Todavia no hay movimientos." />
-          ) : null}
-          <ExpenseList
-            expenses={groupExpenses}
-            participants={groupParticipants}
-            onEditExpense={openEditExpensePanel}
-            onDeleteExpense={onDeleteExpense}
-          />
-          {renderPayments()}
-          <SettlementCyclesList cycles={groupCycles} expenses={groupExpenses} />
-        </div>
+        <GroupMovements
+          expenses={groupExpenses}
+          settlementPayments={settlementPayments.filter((payment) => payment.groupId === group.id)}
+          settlementCycles={groupCycles}
+          participants={groupParticipants}
+          onEditExpense={openEditExpensePanel}
+          onDeleteExpense={onDeleteExpense}
+          onVoidSettlementPayment={onVoidSettlementPayment}
+        />
       );
     }
 
