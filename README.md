@@ -1,6 +1,6 @@
 # Cuentas Claras
 
-Web app para dividir gastos en grupos permanentes. La app usa Supabase Auth con email y contraseña, memberships por grupo y Supabase Realtime Broadcast para sincronizar cambios.
+Web app para dividir gastos en grupos permanentes. Usa React, TypeScript, Vite, Tailwind, Supabase Auth con email y contrasena, memberships por grupo y Supabase Realtime Broadcast.
 
 ## Instalar
 
@@ -53,33 +53,68 @@ No subir `.env.local`.
 
 Anonymous Auth ya no es necesario para el flujo principal. Puede quedar apagado o sin uso.
 
-## Usuarios y participantes
+## Usuarios, perfiles y participantes
 
 Usuario:
-- Tiene email y contraseña.
-- Puede iniciar sesión desde cualquier dispositivo.
-- Recupera “Mis grupos” por memberships activas.
+- Tiene email y contrasena.
+- Puede iniciar sesion desde cualquier dispositivo.
+- Recupera "Mis grupos" por memberships activas.
+- Tiene perfil con nombre y alias de pago opcional.
 
 Participante:
 - Representa a una persona dentro de un grupo.
 - Puede existir sin usuario.
+- Tiene alias propio dentro del grupo.
 - Sirve para cargar gastos de gente que no usa la app.
 
-Al crear un grupo se pide nombre del grupo y “Tu nombre en este grupo”. Eso crea el participante owner y la membership owner.
+Al crear cuenta se pide nombre y alias de pago opcional. Ese perfil prellena "Tu nombre en este grupo" y el alias del participante al crear o entrar a un grupo. El alias que se muestra para transferir es el alias del participante receptor.
 
 ## Grupos e invitaciones
 
 - Ruta compartida: `/g/:shareToken`.
 - Cualquier persona con el link puede solicitar unirse, pero debe tener cuenta.
-- Si no tiene sesión, primero ve la pantalla de Entrar / Crear cuenta y luego sigue en el link.
+- Si no tiene sesion, primero ve Entrar / Crear cuenta y luego sigue en el link.
 - Al unirse, elige un participante disponible o crea uno nuevo.
 - No puede elegir un participante ya asociado a otro usuario activo.
 - El owner puede revocar miembros.
 - El owner puede regenerar el link. Links anteriores dejan de servir para nuevos ingresos.
 
-## Diagnóstico antes de índices únicos
+## Gastos flexibles
 
-Si el schema falla al crear índices por datos viejos duplicados, diagnosticar:
+Los gastos soportan:
+- una persona que paga;
+- varias personas que pagan;
+- division en partes iguales;
+- division manual por monto.
+
+La fuente nueva de verdad esta en:
+- `expense_payers`
+- `expense_splits`
+
+Las columnas viejas `paid_by_participant_id` y `split_participant_ids` quedan por compatibilidad. El schema incluye backfill: por cada gasto viejo crea un payer con el pagador original y splits igualitarios entre los participantes guardados. Si el total no divide exacto, reparte centavos restantes de forma deterministica.
+
+Porcentajes quedan para mas adelante.
+
+## Saldar deuda individual
+
+Cada linea de "Para saldar" tiene boton "Saldar". Eso registra un pago real en `settlement_payments` usando los datos del settlement calculado: quien debe, quien recibe y monto.
+
+Ese pago ajusta el balance actual y se sincroniza por realtime. No hay anulacion de pagos todavia; la tabla ya tiene `voided_at` preparado.
+
+Importante:
+- "Saldar" registra un pago individual.
+- "Cerrar periodo" archiva/ordena periodos.
+- Cerrar periodo no fue modificado en esta iteracion y sera revisado despues para contemplar pagos individuales y nuevas estructuras de gasto.
+
+## Tiempo real
+
+Supabase Realtime Broadcast solo avisa cambios al topic `group:<shareToken>`.
+
+El WebSocket no manda gastos, nombres, montos ni participantes. La app recibe `group_changed` y recarga por RPC con `loadGroupByShareToken(shareToken)`.
+
+## Diagnostico antes de indices unicos
+
+Si el schema falla al crear indices por datos viejos duplicados, diagnosticar:
 
 ```sql
 select group_id, auth_user_id, count(*)
@@ -96,25 +131,22 @@ group by group_id, participant_id
 having count(*) > 1;
 ```
 
-No borrar datos automáticamente. Revocar o limpiar duplicados de prueba antes de crear índices.
-
-## Tiempo real
-
-Supabase Realtime Broadcast solo avisa cambios al topic `group:<shareToken>`.
-
-El WebSocket no manda gastos, nombres, montos ni participantes. La app recibe `group_changed` y recarga por RPC con `loadGroupByShareToken(shareToken)`.
+No borrar datos automaticamente. Revocar o limpiar duplicados de prueba antes de crear indices.
 
 ## Seguridad actual
 
-No se usa `service_role` en frontend. No hay secrets en el código. RLS queda activo y la app opera por RPC `SECURITY DEFINER` con validaciones internas.
+No se usa `service_role` en frontend. No hay secrets en el codigo. RLS queda activo y la app opera por RPC `SECURITY DEFINER` con validaciones internas.
 
 ## Mejoras futuras
 
 - Google login.
 - Magic links.
-- Recuperación de contraseña.
-- Confirmación de email.
+- Recuperacion de contrasena.
+- Confirmacion de email.
+- Porcentajes en divisiones.
+- Anular pagos registrados.
+- Revisar Cerrar periodo con pagos individuales y gastos flexibles.
 - Transferir grupos entre usuarios.
-- Múltiples owners.
-- Aprobación manual de miembros.
-- Links de invitación de un solo uso.
+- Multiples owners.
+- Aprobacion manual de miembros.
+- Links de invitacion de un solo uso.

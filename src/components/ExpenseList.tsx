@@ -1,8 +1,8 @@
+import { useState } from 'react';
 import type { Expense, Participant } from '../types';
 import { formatDate } from '../lib/dates';
 import { formatARS } from '../lib/money';
 import { EmptyState } from './EmptyState';
-import { useState } from 'react';
 
 type ExpenseListProps = {
   expenses: Expense[];
@@ -19,6 +19,30 @@ export function ExpenseList({ expenses, participants, onEditExpense, onDeleteExp
     return participants.find((participant) => participant.id === id)?.name ?? 'Participante eliminado';
   }
 
+  function payerText(expense: Expense): string {
+    const payers = expense.payers?.length
+      ? expense.payers
+      : expense.paidByParticipantId
+        ? [{ participantId: expense.paidByParticipantId, amountCents: expense.amountCents }]
+        : [];
+
+    if (payers.length === 0) return 'Sin pagador';
+    if (payers.length === 1) return participantName(payers[0].participantId);
+    return payers.map((payer) => `${participantName(payer.participantId)} ${formatARS(payer.amountCents)}`).join(' + ');
+  }
+
+  function splitText(expense: Expense): string {
+    const splits = expense.splits?.length
+      ? expense.splits
+      : (expense.splitParticipantIds ?? []).map((participantId) => ({ participantId, amountCents: 0 }));
+
+    if (splits.length === 0) return 'Sin division';
+    if ((expense.splitMode ?? 'equal') === 'manual') {
+      return splits.map((split) => `${participantName(split.participantId)} ${formatARS(split.amountCents)}`).join(' + ');
+    }
+    return `Partes iguales entre ${splits.map((split) => participantName(split.participantId)).join(', ')}`;
+  }
+
   async function handleDelete(expense: Expense) {
     const confirmed = window.confirm(`Eliminar el gasto "${expense.title}"?`);
     if (!confirmed) return;
@@ -31,7 +55,7 @@ export function ExpenseList({ expenses, participants, onEditExpense, onDeleteExp
   }
 
   if (sortedExpenses.length === 0) {
-    return <EmptyState title="Todavía no cargaste gastos." description="Agregá el primer gasto del grupo." />;
+    return <EmptyState title="Todavia no cargaste gastos." description="Agrega el primer gasto del grupo." />;
   }
 
   return (
@@ -50,12 +74,12 @@ export function ExpenseList({ expenses, participants, onEditExpense, onDeleteExp
             </div>
             <dl className="mt-3 grid gap-2 text-sm text-slate-600">
               <div>
-                <dt className="font-medium text-slate-700">Pagó</dt>
-                <dd>{participantName(expense.paidByParticipantId)}</dd>
+                <dt className="font-medium text-slate-700">Pagado por</dt>
+                <dd>{payerText(expense)}</dd>
               </div>
               <div>
-                <dt className="font-medium text-slate-700">Se divide entre</dt>
-                <dd>{expense.splitParticipantIds.map(participantName).join(', ')}</dd>
+                <dt className="font-medium text-slate-700">Division</dt>
+                <dd>{splitText(expense)}</dd>
               </div>
               <div>
                 <dt className="font-medium text-slate-700">Estado</dt>

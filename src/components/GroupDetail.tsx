@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Expense, Group, GroupMembership, Participant, SettlementCycle } from '../types';
+import type { Expense, Group, GroupMembership, Participant, Settlement, SettlementCycle, SettlementPayment } from '../types';
 import type { GroupMemberView } from '../data/supabaseStorage';
 import type { RealtimeStatus } from '../data/realtime';
 import { calculateBalances, getOpenExpenses, simplifySettlements } from '../lib/calculations';
@@ -20,6 +20,7 @@ type GroupDetailProps = {
   participants: Participant[];
   expenses: Expense[];
   settlementCycles: SettlementCycle[];
+  settlementPayments: SettlementPayment[];
   currentMembership?: GroupMembership | null;
   members?: GroupMemberView[];
   onBack: () => void;
@@ -29,6 +30,7 @@ type GroupDetailProps = {
   onCreateExpense: (expense: Omit<Expense, 'id' | 'createdAt'>) => void | Promise<void>;
   onUpdateExpense: (expense: Expense) => void | Promise<void>;
   onDeleteExpense: (expenseId: string) => void | Promise<void>;
+  onSettleDebt?: (settlement: Settlement) => void | Promise<void>;
   onCloseOpenExpenses: () => void | Promise<void>;
   onRetry?: () => void | Promise<void>;
   onManualRefresh?: () => void | Promise<void>;
@@ -55,6 +57,7 @@ export function GroupDetail({
   participants,
   expenses,
   settlementCycles,
+  settlementPayments,
   currentMembership,
   members = [],
   onBack,
@@ -64,6 +67,7 @@ export function GroupDetail({
   onCreateExpense,
   onUpdateExpense,
   onDeleteExpense,
+  onSettleDebt,
   onCloseOpenExpenses,
   onRetry,
   onManualRefresh,
@@ -84,13 +88,14 @@ export function GroupDetail({
   const groupParticipants = participants.filter((participant) => participant.groupId === group.id);
   const groupExpenses = expenses.filter((expense) => expense.groupId === group.id);
   const groupCycles = settlementCycles.filter((cycle) => cycle.groupId === group.id);
+  const groupSettlementPayments = settlementPayments.filter((payment) => payment.groupId === group.id && !payment.voidedAt);
   const isOwner = currentMembership?.role === 'owner' && currentMembership.status === 'active';
   const openExpenses = getOpenExpenses(groupExpenses);
   const totalOpenCents = openExpenses.reduce((total, expense) => total + expense.amountCents, 0);
 
   const balances = useMemo(
-    () => calculateBalances(group, groupParticipants, groupExpenses),
-    [group, groupParticipants, groupExpenses]
+    () => calculateBalances(group, groupParticipants, groupExpenses, groupSettlementPayments),
+    [group, groupParticipants, groupExpenses, groupSettlementPayments]
   );
   const settlements = useMemo(() => simplifySettlements(balances), [balances]);
 
@@ -98,15 +103,21 @@ export function GroupDetail({
     return groupParticipants.find((participant) => participant.id === id)?.name ?? 'Participante';
   }
 
+  function participantAlias(id: string): string | undefined {
+    return groupParticipants.find((participant) => participant.id === id)?.alias;
+  }
+
   function buildWhatsAppSummary(): string {
     const lines = [`Resumen de "${group.name}"`, '', `Total abierto: ${formatARS(totalOpenCents)}`, '', 'Para saldar:'];
     if (settlements.length === 0) lines.push('Todo está saldado.');
     else {
       for (const settlement of settlements) {
+        const alias = participantAlias(settlement.toParticipantId);
+        const aliasText = alias ? ` - Alias: ${alias}` : '';
         lines.push(
           `- ${participantName(settlement.fromParticipantId)} le paga ${formatARS(settlement.amountCents)} a ${participantName(
             settlement.toParticipantId
-          )}`
+          )}${aliasText}`
         );
       }
     }
@@ -211,7 +222,7 @@ export function GroupDetail({
           {openExpenses.length === 0 ? (
             <EmptyState title="Todavía no hay gastos abiertos." />
           ) : null}
-          <SettlementList settlements={settlements} participants={groupParticipants} />
+          <SettlementList settlements={settlements} participants={groupParticipants} onSettle={onSettleDebt} />
           <BalanceSummary balances={balances} participants={groupParticipants} />
           <button
             type="button"
@@ -274,6 +285,28 @@ export function GroupDetail({
           ) : null}
         </section>
         {membersManager}
+        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="text-base font-semibold text-slate-900">Pagos registrados</h2>
+          {groupSettlementPayments.length === 0 ? (
+            <p className="text-sm text-slate-500">Todavia no hay pagos registrados.</p>
+          ) : (
+            <div className="grid gap-2">
+              {groupSettlementPayments
+                .slice()
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                .map((payment) => (
+                  <div key={payment.id} className="rounded-md border border-slate-200 p-3 text-sm text-slate-700">
+                    <p>
+                      <span className="font-semibold">{participantName(payment.fromParticipantId)}</span> le pago{' '}
+                      <span className="font-semibold">{formatARS(payment.amountCents)}</span> a{' '}
+                      <span className="font-semibold">{participantName(payment.toParticipantId)}</span>
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">{new Date(payment.createdAt).toLocaleDateString('es-AR')}</p>
+                  </div>
+                ))}
+            </div>
+          )}
+        </section>
         <SettlementCyclesList cycles={groupCycles} expenses={groupExpenses} />
       </div>
     );

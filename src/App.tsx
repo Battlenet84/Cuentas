@@ -19,16 +19,19 @@ import {
 } from './data/storage';
 import {
   closeRemoteSettlementCycle,
+  createSettlementPaymentByToken,
   createRemoteExpense,
   createRemoteGroup,
   createRemoteParticipant,
   deleteRemoteExpense,
   getGroupMembers,
+  getMyProfile,
   joinGroupByToken,
   loadGroupByShareToken,
   loadMyGroups,
   regenerateGroupInviteToken,
   revokeGroupMember,
+  upsertMyProfile,
   type GroupMemberView,
   updateMyGroupIdentity,
   updateRemoteExpense,
@@ -39,7 +42,7 @@ import { getCurrentSession, listenToAuthChanges, signInWithEmail, signOut, signU
 import { getOpenExpenses } from './lib/calculations';
 import { createId, createShareToken } from './lib/ids';
 import { isSupabaseConfigured, supabaseConfigError } from './lib/supabase';
-import type { AppState, Expense, Participant } from './types';
+import type { AppState, Expense, Participant, Profile, Settlement } from './types';
 
 type Route =
   | { kind: 'home' }
@@ -75,6 +78,7 @@ function App() {
   const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMemberView[]>([]);
   const [syncStatus, setSyncStatus] = useState<RealtimeStatus>('idle');
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
@@ -104,6 +108,7 @@ function App() {
       .then((session) => {
         setAuthUserId(session?.user.id ?? null);
         setAuthError(null);
+        if (session?.user.id) void getMyProfile().then(setProfile).catch(() => setProfile(null));
       })
       .catch(() => {
         setAuthError('No se pudo cargar la sesión.');
@@ -112,6 +117,7 @@ function App() {
 
     const cleanup = listenToAuthChanges((_event, session) => {
       setAuthUserId(session?.user.id ?? null);
+      if (session?.user.id) void getMyProfile().then(setProfile).catch(() => setProfile(null));
       if (!session) setState(emptyState);
     });
 
@@ -244,7 +250,7 @@ function App() {
     } catch {
       setDetailError('No se pudo cargar la información del grupo.');
       setRouteMessage('No encontramos este grupo.');
-      setState({ groups: [], participants: [], expenses: [], settlementCycles: [] });
+      setState({ groups: [], participants: [], expenses: [], settlementCycles: [], settlementPayments: [] });
       setGroupMembers([]);
       setSyncStatus('error');
     } finally {
@@ -285,23 +291,26 @@ function App() {
   async function handleSignIn(email: string, password: string) {
     const session = await signInWithEmail(email, password);
     setAuthUserId(session.user.id);
+    setProfile(await getMyProfile());
     setAuthError(null);
   }
 
-  async function handleSignUp(email: string, password: string) {
+  async function handleSignUp(email: string, password: string, signupProfile: { displayName: string; paymentAlias?: string }) {
     const session = await signUpWithEmail(email, password);
     setAuthUserId(session?.user.id ?? null);
+    setProfile(await upsertMyProfile(signupProfile));
     setAuthError(null);
   }
 
   async function handleSignOut() {
     await signOut();
     setAuthUserId(null);
+    setProfile(null);
     setState(emptyState);
     navigate({ kind: 'home' }, true);
   }
 
-  async function handleCreateGroup(input: { name: string; ownerParticipantName: string }) {
+  async function handleCreateGroup(input: { name: string; ownerParticipantName: string; ownerParticipantAlias?: string }) {
     if (isSupabaseConfigured) {
       if (!authUserId) {
         setRouteMessage('Iniciá sesión para crear grupos.');
@@ -311,7 +320,7 @@ function App() {
       setDetailError(null);
       try {
         const group = await createRemoteGroup(input);
-        setState({ groups: [group], participants: [], expenses: [], settlementCycles: [] });
+        setState({ groups: [group], participants: [], expenses: [], settlementCycles: [], settlementPayments: [] });
         navigate({ kind: 'sharedGroup', shareToken: group.shareToken ?? group.id });
       } catch {
         setRouteMessage('No se pudo crear el grupo.');
@@ -335,6 +344,7 @@ function App() {
         id: createId('participant'),
         groupId: group.id,
         name: input.ownerParticipantName,
+        alias: input.ownerParticipantAlias,
         isActive: true
       });
     });
@@ -479,6 +489,21 @@ function App() {
     persist((current) => deleteExpense(current, expenseId));
   }
 
+  async function handleSettleDebt(settlement: Settlement) {
+    if (route.kind !== 'sharedGroup') return;
+
+    await runRemoteOperation(
+      route.shareToken,
+      () =>
+        createSettlementPaymentByToken(route.shareToken, {
+          fromParticipantId: settlement.fromParticipantId,
+          toParticipantId: settlement.toParticipantId,
+          amountCents: settlement.amountCents
+        }).then(() => undefined),
+      'No se pudo registrar el pago.'
+    );
+  }
+
   async function handleCloseOpenExpenses(groupId: string) {
     if (route.kind === 'sharedGroup') {
       await runRemoteOperation(
@@ -550,6 +575,8 @@ function App() {
         group={selectedGroup}
         participants={state.participants}
         claimedParticipantIds={state.claimedParticipantIds}
+        defaultName={profile?.displayName ?? ''}
+        defaultAlias={profile?.paymentAlias ?? ''}
         onJoin={handleJoinGroup}
         onBack={openHome}
       />
@@ -578,6 +605,7 @@ function App() {
             participants={state.participants}
             expenses={state.expenses}
             settlementCycles={state.settlementCycles}
+            settlementPayments={state.settlementPayments}
             currentMembership={state.currentMembership ?? null}
             members={groupMembers}
             onBack={openHome}
@@ -587,6 +615,7 @@ function App() {
             onCreateExpense={handleCreateExpense}
             onUpdateExpense={handleUpdateExpense}
             onDeleteExpense={handleDeleteExpense}
+            onSettleDebt={route.kind === 'sharedGroup' ? handleSettleDebt : undefined}
             onCloseOpenExpenses={() => handleCloseOpenExpenses(selectedGroup.id)}
             onRetry={route.kind === 'sharedGroup' ? () => refreshRemoteGroup(route.shareToken) : undefined}
             onManualRefresh={route.kind === 'sharedGroup' ? () => refreshRemoteGroup(route.shareToken, { quiet: true }) : undefined}
@@ -643,7 +672,12 @@ function App() {
           </div>
         ) : null}
 
-        <CreateGroupForm onCreate={(input) => void handleCreateGroup(input)} requiresOwnerName={isSupabaseConfigured} />
+        <CreateGroupForm
+          onCreate={(input) => void handleCreateGroup(input)}
+          requiresOwnerName={isSupabaseConfigured}
+          defaultOwnerName={profile?.displayName ?? ''}
+          defaultOwnerAlias={profile?.paymentAlias ?? ''}
+        />
         {isSaving ? <p className="text-sm font-medium text-slate-600">Guardando cambios...</p> : null}
         {isSupabaseConfigured ? <h2 className="text-lg font-semibold text-slate-900">Mis grupos</h2> : null}
         <GroupList groups={state.groups} participants={state.participants} onOpenGroup={openLocalGroup} />

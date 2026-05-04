@@ -606,6 +606,470 @@ execute function public.notify_group_changed();
 
 NOTIFY pgrst, 'reload schema';
 
+-- Iteracion: alias de pago, pagos individuales y gastos flexibles.
+-- Ejecutar este bloque completo en SQL Editor. Es re-ejecutable y no modifica close_cycle_by_token.
+
+create table if not exists public.profiles (
+  auth_user_id uuid primary key references auth.users(id) on delete cascade,
+  display_name text null,
+  payment_alias text null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.profiles enable row level security;
+
+create table if not exists public.settlement_payments (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references public.groups(id) on delete cascade,
+  from_participant_id uuid not null references public.participants(id),
+  to_participant_id uuid not null references public.participants(id),
+  amount_cents integer not null check (amount_cents > 0),
+  created_by_auth_user_id uuid not null references auth.users(id),
+  created_at timestamptz not null default now(),
+  voided_at timestamptz null
+);
+
+create index if not exists settlement_payments_group_id_idx on public.settlement_payments(group_id);
+create index if not exists settlement_payments_voided_at_idx on public.settlement_payments(voided_at);
+alter table public.settlement_payments enable row level security;
+
+alter table public.expenses
+  add column if not exists payer_mode text not null default 'single' check (payer_mode in ('single', 'multiple')),
+  add column if not exists split_mode text not null default 'equal' check (split_mode in ('equal', 'manual'));
+
+create table if not exists public.expense_payers (
+  id uuid primary key default gen_random_uuid(),
+  expense_id uuid not null references public.expenses(id) on delete cascade,
+  participant_id uuid not null references public.participants(id),
+  amount_cents integer not null check (amount_cents > 0)
+);
+
+create table if not exists public.expense_splits (
+  id uuid primary key default gen_random_uuid(),
+  expense_id uuid not null references public.expenses(id) on delete cascade,
+  participant_id uuid not null references public.participants(id),
+  amount_cents integer not null check (amount_cents >= 0)
+);
+
+create index if not exists expense_payers_expense_id_idx on public.expense_payers(expense_id);
+create index if not exists expense_payers_participant_id_idx on public.expense_payers(participant_id);
+create index if not exists expense_splits_expense_id_idx on public.expense_splits(expense_id);
+create index if not exists expense_splits_participant_id_idx on public.expense_splits(participant_id);
+alter table public.expense_payers enable row level security;
+alter table public.expense_splits enable row level security;
+
+insert into public.expense_payers (expense_id, participant_id, amount_cents)
+select e.id, e.paid_by_participant_id, e.amount_cents
+from public.expenses e
+where e.paid_by_participant_id is not null
+  and not exists (select 1 from public.expense_payers ep where ep.expense_id = e.id);
+
+insert into public.expense_splits (expense_id, participant_id, amount_cents)
+select e.id,
+       split_participant_id,
+       floor(e.amount_cents::numeric / cardinality(e.split_participant_ids))::integer
+         + case when row_number() over (partition by e.id order by split_participant_id) <= (e.amount_cents % cardinality(e.split_participant_ids)) then 1 else 0 end
+from public.expenses e
+cross join lateral unnest(e.split_participant_ids) as split_participant_id
+where cardinality(e.split_participant_ids) > 0
+  and not exists (select 1 from public.expense_splits es where es.expense_id = e.id);
+
+create or replace function public.get_my_profile()
+returns profiles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_profile profiles%rowtype;
+begin
+  if v_user_id is null then raise exception 'Necesitas iniciar sesion.'; end if;
+  select * into v_profile from profiles where auth_user_id = v_user_id;
+  return v_profile;
+end;
+$$;
+
+create or replace function public.upsert_my_profile(p_display_name text, p_payment_alias text)
+returns profiles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_profile profiles%rowtype;
+begin
+  if v_user_id is null then raise exception 'Necesitas iniciar sesion.'; end if;
+  insert into profiles (auth_user_id, display_name, payment_alias)
+  values (v_user_id, nullif(trim(p_display_name), ''), nullif(trim(p_payment_alias), ''))
+  on conflict (auth_user_id) do update
+  set display_name = excluded.display_name,
+      payment_alias = excluded.payment_alias,
+      updated_at = now()
+  returning * into v_profile;
+  return v_profile;
+end;
+$$;
+
+create or replace function public.create_group_with_owner(
+  p_name text,
+  p_share_token text,
+  p_owner_participant_name text,
+  p_owner_participant_alias text default null
+)
+returns groups
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group groups%rowtype;
+  v_participant participants%rowtype;
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Necesitas iniciar sesion para crear grupos.'; end if;
+  if nullif(trim(p_name), '') is null then raise exception 'El nombre del grupo es obligatorio.'; end if;
+  if nullif(trim(p_share_token), '') is null then raise exception 'El token del grupo es obligatorio.'; end if;
+  if nullif(trim(p_owner_participant_name), '') is null then raise exception 'Tu nombre en este grupo es obligatorio.'; end if;
+
+  insert into groups (name, share_token)
+  values (trim(p_name), trim(p_share_token))
+  returning * into v_group;
+
+  insert into participants (group_id, name, alias)
+  values (v_group.id, trim(p_owner_participant_name), nullif(trim(p_owner_participant_alias), ''))
+  returning * into v_participant;
+
+  insert into group_memberships (group_id, participant_id, auth_user_id, role, status)
+  values (v_group.id, v_participant.id, v_user_id, 'owner', 'active');
+
+  return v_group;
+end;
+$$;
+
+create or replace function public.validate_expense_payload(
+  p_group_id uuid,
+  p_amount_cents integer,
+  p_payers jsonb,
+  p_splits jsonb,
+  p_payer_mode text,
+  p_split_mode text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_payer_count integer;
+  v_split_count integer;
+  v_payer_sum integer;
+  v_split_sum integer;
+  v_invalid_payers integer;
+  v_invalid_splits integer;
+begin
+  if p_amount_cents is null or p_amount_cents <= 0 then raise exception 'El monto tiene que ser mayor a 0.'; end if;
+  if p_payer_mode not in ('single', 'multiple') then raise exception 'Modo de pago invalido.'; end if;
+  if p_split_mode not in ('equal', 'manual') then raise exception 'Modo de division invalido.'; end if;
+
+  with payers as (
+    select (item->>'participantId')::uuid participant_id, (item->>'amountCents')::integer amount_cents
+    from jsonb_array_elements(coalesce(p_payers, '[]'::jsonb)) item
+  )
+  select count(*), coalesce(sum(amount_cents), 0),
+         count(*) filter (where amount_cents <= 0 or not exists (select 1 from participants p where p.id = participant_id and p.group_id = p_group_id))
+  into v_payer_count, v_payer_sum, v_invalid_payers
+  from payers;
+
+  with splits as (
+    select (item->>'participantId')::uuid participant_id, (item->>'amountCents')::integer amount_cents
+    from jsonb_array_elements(coalesce(p_splits, '[]'::jsonb)) item
+  )
+  select count(*), coalesce(sum(amount_cents), 0),
+         count(*) filter (where amount_cents < 0 or not exists (select 1 from participants p where p.id = participant_id and p.group_id = p_group_id))
+  into v_split_count, v_split_sum, v_invalid_splits
+  from splits;
+
+  if v_payer_count = 0 then raise exception 'Elegi quien pago.'; end if;
+  if v_split_count = 0 then raise exception 'Selecciona al menos un participante para dividir.'; end if;
+  if v_invalid_payers > 0 then raise exception 'Hay pagadores invalidos.'; end if;
+  if v_invalid_splits > 0 then raise exception 'Hay participantes invalidos en la division.'; end if;
+  if v_payer_sum <> p_amount_cents then raise exception 'La suma pagada tiene que coincidir con el total.'; end if;
+  if v_split_sum <> p_amount_cents then raise exception 'La suma de la division tiene que coincidir con el total.'; end if;
+  if p_payer_mode = 'single' and v_payer_count <> 1 then raise exception 'El modo una persona exige un pagador.'; end if;
+end;
+$$;
+
+create or replace function public.create_expense_by_token(
+  p_share_token text,
+  p_title text,
+  p_amount_cents integer,
+  p_date date,
+  p_payers jsonb,
+  p_splits jsonb,
+  p_payer_mode text,
+  p_split_mode text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_member_group_id(p_share_token);
+  v_expense expenses%rowtype;
+  v_first_payer uuid;
+  v_split_ids uuid[];
+begin
+  if nullif(trim(p_title), '') is null then raise exception 'El nombre del gasto es obligatorio.'; end if;
+  perform public.validate_expense_payload(v_group_id, p_amount_cents, p_payers, p_splits, p_payer_mode, p_split_mode);
+
+  select (item->>'participantId')::uuid into v_first_payer from jsonb_array_elements(p_payers) item limit 1;
+  select array_agg((item->>'participantId')::uuid) into v_split_ids from jsonb_array_elements(p_splits) item;
+
+  insert into expenses (group_id, title, amount_cents, paid_by_participant_id, split_participant_ids, date, payer_mode, split_mode)
+  values (v_group_id, trim(p_title), p_amount_cents, v_first_payer, v_split_ids, p_date, p_payer_mode, p_split_mode)
+  returning * into v_expense;
+
+  insert into expense_payers (expense_id, participant_id, amount_cents)
+  select v_expense.id, (item->>'participantId')::uuid, (item->>'amountCents')::integer
+  from jsonb_array_elements(p_payers) item;
+
+  insert into expense_splits (expense_id, participant_id, amount_cents)
+  select v_expense.id, (item->>'participantId')::uuid, (item->>'amountCents')::integer
+  from jsonb_array_elements(p_splits) item;
+
+  return public.expense_with_lines_json(v_expense);
+end;
+$$;
+
+create or replace function public.update_expense_by_token(
+  p_share_token text,
+  p_expense_id uuid,
+  p_title text,
+  p_amount_cents integer,
+  p_date date,
+  p_payers jsonb,
+  p_splits jsonb,
+  p_payer_mode text,
+  p_split_mode text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_member_group_id(p_share_token);
+  v_expense expenses%rowtype;
+  v_first_payer uuid;
+  v_split_ids uuid[];
+begin
+  if nullif(trim(p_title), '') is null then raise exception 'El nombre del gasto es obligatorio.'; end if;
+  perform public.validate_expense_payload(v_group_id, p_amount_cents, p_payers, p_splits, p_payer_mode, p_split_mode);
+  if not exists (select 1 from expenses where id = p_expense_id and group_id = v_group_id) then
+    raise exception 'No encontramos ese gasto en este grupo.';
+  end if;
+
+  select (item->>'participantId')::uuid into v_first_payer from jsonb_array_elements(p_payers) item limit 1;
+  select array_agg((item->>'participantId')::uuid) into v_split_ids from jsonb_array_elements(p_splits) item;
+
+  update expenses
+  set title = trim(p_title),
+      amount_cents = p_amount_cents,
+      paid_by_participant_id = v_first_payer,
+      split_participant_ids = v_split_ids,
+      date = p_date,
+      payer_mode = p_payer_mode,
+      split_mode = p_split_mode
+  where id = p_expense_id and group_id = v_group_id
+  returning * into v_expense;
+
+  delete from expense_payers where expense_id = v_expense.id;
+  delete from expense_splits where expense_id = v_expense.id;
+
+  insert into expense_payers (expense_id, participant_id, amount_cents)
+  select v_expense.id, (item->>'participantId')::uuid, (item->>'amountCents')::integer
+  from jsonb_array_elements(p_payers) item;
+
+  insert into expense_splits (expense_id, participant_id, amount_cents)
+  select v_expense.id, (item->>'participantId')::uuid, (item->>'amountCents')::integer
+  from jsonb_array_elements(p_splits) item;
+
+  return public.expense_with_lines_json(v_expense);
+end;
+$$;
+
+create or replace function public.expense_with_lines_json(p_expense expenses)
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  select to_jsonb(p_expense)
+    || jsonb_build_object(
+      'payerMode', p_expense.payer_mode,
+      'splitMode', p_expense.split_mode,
+      'payers', coalesce((select jsonb_agg(jsonb_build_object('participantId', ep.participant_id, 'amountCents', ep.amount_cents) order by ep.id) from expense_payers ep where ep.expense_id = p_expense.id), '[]'::jsonb),
+      'splits', coalesce((select jsonb_agg(jsonb_build_object('participantId', es.participant_id, 'amountCents', es.amount_cents) order by es.id) from expense_splits es where es.expense_id = p_expense.id), '[]'::jsonb)
+    );
+$$;
+
+create or replace function public.get_group_data(p_share_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group groups%rowtype;
+  v_user_id uuid := auth.uid();
+  v_membership group_memberships%rowtype;
+  v_has_active boolean;
+  v_has_revoked boolean;
+begin
+  if v_user_id is null then raise exception 'Necesitas iniciar sesion.'; end if;
+
+  select * into v_group from groups where share_token = p_share_token and archived_at is null;
+  if not found then raise exception 'No encontramos este grupo.'; end if;
+
+  select exists (select 1 from group_memberships where group_id = v_group.id and auth_user_id = v_user_id and status = 'active') into v_has_active;
+  select exists (select 1 from group_memberships where group_id = v_group.id and auth_user_id = v_user_id and status = 'revoked') into v_has_revoked;
+
+  if not v_has_active and v_has_revoked then
+    return jsonb_build_object(
+      'group', to_jsonb(v_group),
+      'participants', '[]'::jsonb,
+      'expenses', '[]'::jsonb,
+      'settlementCycles', '[]'::jsonb,
+      'settlementPayments', '[]'::jsonb,
+      'memberships', '[]'::jsonb,
+      'currentMembership', null,
+      'claimedParticipantIds', '[]'::jsonb,
+      'accessStatus', 'revoked',
+      'accessRevoked', true
+    );
+  end if;
+
+  if not v_has_active then
+    return jsonb_build_object(
+      'group', to_jsonb(v_group),
+      'participants', coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at) from participants p where p.group_id = v_group.id and p.is_active = true), '[]'::jsonb),
+      'expenses', '[]'::jsonb,
+      'settlementCycles', '[]'::jsonb,
+      'settlementPayments', '[]'::jsonb,
+      'memberships', '[]'::jsonb,
+      'currentMembership', null,
+      'claimedParticipantIds', coalesce((select jsonb_agg(m.participant_id) from group_memberships m where m.group_id = v_group.id and m.status = 'active' and m.participant_id is not null), '[]'::jsonb),
+      'accessStatus', 'requires_join',
+      'requiresJoin', true
+    );
+  end if;
+
+  select * into v_membership
+  from group_memberships
+  where group_id = v_group.id and auth_user_id = v_user_id and status = 'active'
+  limit 1;
+
+  update group_memberships set last_seen_at = now() where id = v_membership.id returning * into v_membership;
+
+  return jsonb_build_object(
+    'group', to_jsonb(v_group),
+    'participants', coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at) from participants p where p.group_id = v_group.id), '[]'::jsonb),
+    'expenses', coalesce((select jsonb_agg(public.expense_with_lines_json(e) order by e.date desc, e.created_at desc) from expenses e where e.group_id = v_group.id), '[]'::jsonb),
+    'settlementCycles', coalesce((select jsonb_agg(to_jsonb(sc) order by sc.closed_at desc) from settlement_cycles sc where sc.group_id = v_group.id), '[]'::jsonb),
+    'settlementPayments', coalesce((select jsonb_agg(to_jsonb(sp) order by sp.created_at desc) from settlement_payments sp where sp.group_id = v_group.id), '[]'::jsonb),
+    'memberships', coalesce((select jsonb_agg(to_jsonb(m) order by m.joined_at) from group_memberships m where m.group_id = v_group.id), '[]'::jsonb),
+    'currentMembership', to_jsonb(v_membership),
+    'claimedParticipantIds', coalesce((select jsonb_agg(m.participant_id) from group_memberships m where m.group_id = v_group.id and m.status = 'active' and m.participant_id is not null), '[]'::jsonb),
+    'accessStatus', 'member'
+  );
+end;
+$$;
+
+create or replace function public.create_settlement_payment_by_token(
+  p_share_token text,
+  p_from_participant_id uuid,
+  p_to_participant_id uuid,
+  p_amount_cents integer
+)
+returns settlement_payments
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_member_group_id(p_share_token);
+  v_user_id uuid := auth.uid();
+  v_payment settlement_payments%rowtype;
+begin
+  if v_user_id is null then raise exception 'Necesitas iniciar sesion.'; end if;
+  if p_amount_cents is null or p_amount_cents <= 0 then raise exception 'El monto tiene que ser mayor a 0.'; end if;
+  if p_from_participant_id = p_to_participant_id then raise exception 'El pago necesita dos participantes distintos.'; end if;
+  if not exists (select 1 from participants where id = p_from_participant_id and group_id = v_group_id) then raise exception 'Quien paga no pertenece a este grupo.'; end if;
+  if not exists (select 1 from participants where id = p_to_participant_id and group_id = v_group_id) then raise exception 'Quien recibe no pertenece a este grupo.'; end if;
+
+  insert into settlement_payments (group_id, from_participant_id, to_participant_id, amount_cents, created_by_auth_user_id)
+  values (v_group_id, p_from_participant_id, p_to_participant_id, p_amount_cents, v_user_id)
+  returning * into v_payment;
+  return v_payment;
+end;
+$$;
+
+create or replace function public.notify_group_changed()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid;
+  v_share_token text;
+begin
+  if TG_TABLE_NAME = 'groups' then
+    v_group_id := coalesce(NEW.id, OLD.id);
+    v_share_token := coalesce(NEW.share_token, OLD.share_token);
+  elsif TG_TABLE_NAME in ('expense_payers', 'expense_splits') then
+    select e.group_id into v_group_id from public.expenses e where e.id = coalesce(NEW.expense_id, OLD.expense_id);
+    select share_token into v_share_token from public.groups where id = v_group_id;
+  else
+    v_group_id := coalesce(NEW.group_id, OLD.group_id);
+    select share_token into v_share_token from public.groups where id = v_group_id;
+  end if;
+
+  if v_share_token is not null then
+    perform realtime.send(
+      jsonb_build_object('table', TG_TABLE_NAME, 'operation', TG_OP, 'at', now()),
+      'group_changed',
+      'group:' || v_share_token,
+      false
+    );
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists on_settlement_payments_changed on public.settlement_payments;
+create trigger on_settlement_payments_changed after insert or update or delete on public.settlement_payments for each row execute function public.notify_group_changed();
+drop trigger if exists on_expense_payers_changed on public.expense_payers;
+create trigger on_expense_payers_changed after insert or update or delete on public.expense_payers for each row execute function public.notify_group_changed();
+drop trigger if exists on_expense_splits_changed on public.expense_splits;
+create trigger on_expense_splits_changed after insert or update or delete on public.expense_splits for each row execute function public.notify_group_changed();
+
+grant execute on function get_my_profile() to authenticated;
+grant execute on function upsert_my_profile(text, text) to authenticated;
+grant execute on function create_group_with_owner(text, text, text, text) to authenticated;
+grant execute on function validate_expense_payload(uuid, integer, jsonb, jsonb, text, text) to authenticated;
+grant execute on function expense_with_lines_json(expenses) to authenticated;
+grant execute on function create_expense_by_token(text, text, integer, date, jsonb, jsonb, text, text) to authenticated;
+grant execute on function update_expense_by_token(text, uuid, text, integer, date, jsonb, jsonb, text, text) to authenticated;
+grant execute on function create_settlement_payment_by_token(text, uuid, uuid, integer) to authenticated;
+grant execute on function get_group_data(text) to authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
 -- =========================================================
 -- Email/password auth flow
 -- =========================================================

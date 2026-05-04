@@ -1,4 +1,4 @@
-import type { AppState, Expense, Group, Participant, SettlementCycle } from '../types';
+import type { AppState, Expense, Group, Participant, SettlementCycle, SettlementPayment } from '../types';
 
 const STORAGE_KEY = 'cuentas-claras-state-v1';
 
@@ -6,7 +6,8 @@ export const emptyState: AppState = {
   groups: [],
   participants: [],
   expenses: [],
-  settlementCycles: []
+  settlementCycles: [],
+  settlementPayments: []
 };
 
 export function loadState(): AppState {
@@ -21,7 +22,8 @@ export function loadState(): AppState {
       groups: Array.isArray(parsed.groups) ? parsed.groups : [],
       participants: Array.isArray(parsed.participants) ? parsed.participants : [],
       expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
-      settlementCycles: Array.isArray(parsed.settlementCycles) ? parsed.settlementCycles : []
+      settlementCycles: Array.isArray(parsed.settlementCycles) ? parsed.settlementCycles : [],
+      settlementPayments: Array.isArray(parsed.settlementPayments) ? parsed.settlementPayments : []
     };
   } catch (error) {
     console.warn('No se pudo cargar el estado guardado.', error);
@@ -75,6 +77,10 @@ export function deleteExpense(state: AppState, expenseId: string): AppState {
 
 export function createSettlementCycle(state: AppState, cycle: SettlementCycle): AppState {
   return { ...state, settlementCycles: [cycle, ...state.settlementCycles] };
+}
+
+export function createSettlementPayment(state: AppState, payment: SettlementPayment): AppState {
+  return { ...state, settlementPayments: [payment, ...state.settlementPayments] };
 }
 
 export function assignSettlementCycleToExpenses(

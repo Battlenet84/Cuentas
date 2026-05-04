@@ -2,36 +2,44 @@ import { FormEvent, useState } from 'react';
 
 type AuthScreenProps = {
   onSignIn: (email: string, password: string) => Promise<void>;
-  onSignUp: (email: string, password: string) => Promise<void>;
+  onSignUp: (email: string, password: string, profile: { displayName: string; paymentAlias?: string }) => Promise<void>;
 };
 
 export function AuthScreen({ onSignIn, onSignUp }: AuthScreenProps) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [paymentAlias, setPaymentAlias] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedEmail = email.trim();
+    const trimmedDisplayName = displayName.trim();
+
     if (!trimmedEmail) {
-      setError('Ingresá tu email.');
+      setError('Ingresa tu email.');
       return;
     }
     if (!password) {
-      setError('Ingresá tu contraseña.');
+      setError('Ingresa tu contrasena.');
       return;
     }
     if (password.length < 6) {
-      setError('La contraseña tiene que tener al menos 6 caracteres.');
+      setError('La contrasena tiene que tener al menos 6 caracteres.');
+      return;
+    }
+    if (mode === 'signup' && !trimmedDisplayName) {
+      setError('Ingresa tu nombre.');
       return;
     }
 
     setIsSubmitting(true);
     try {
       if (mode === 'login') await onSignIn(trimmedEmail, password);
-      else await onSignUp(trimmedEmail, password);
+      else await onSignUp(trimmedEmail, password, { displayName: trimmedDisplayName, paymentAlias: paymentAlias.trim() || undefined });
       setError(null);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'No se pudo entrar.');
@@ -65,6 +73,30 @@ export function AuthScreen({ onSignIn, onSignUp }: AuthScreenProps) {
         </div>
         <form onSubmit={handleSubmit} className="mt-4 grid gap-3">
           {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+          {mode === 'signup' ? (
+            <>
+              <label className="grid gap-1 text-sm font-medium text-slate-700">
+                Nombre
+                <input
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+                  autoComplete="name"
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-medium text-slate-700">
+                <span>
+                  Alias de pago <span className="font-normal text-slate-500">Opcional</span>
+                </span>
+                <input
+                  value={paymentAlias}
+                  onChange={(event) => setPaymentAlias(event.target.value)}
+                  className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+                  placeholder="Ej: flor.mp"
+                />
+              </label>
+            </>
+          ) : null}
           <label className="grid gap-1 text-sm font-medium text-slate-700">
             Email
             <input
@@ -76,7 +108,7 @@ export function AuthScreen({ onSignIn, onSignUp }: AuthScreenProps) {
             />
           </label>
           <label className="grid gap-1 text-sm font-medium text-slate-700">
-            Contraseña
+            Contrasena
             <input
               type="password"
               value={password}

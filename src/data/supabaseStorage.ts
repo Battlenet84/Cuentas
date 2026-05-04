@@ -1,4 +1,16 @@
-import type { AppState, Expense, Group, GroupDataAccess, GroupMembership, Participant, SettlementCycle } from '../types';
+import type {
+  AppState,
+  Expense,
+  ExpensePayer,
+  ExpenseSplit,
+  Group,
+  GroupDataAccess,
+  GroupMembership,
+  Participant,
+  Profile,
+  SettlementCycle,
+  SettlementPayment
+} from '../types';
 import { getSupabaseClient } from '../lib/supabase';
 import { createShareToken } from '../lib/ids';
 
@@ -19,13 +31,28 @@ type RemoteParticipant = {
   created_at: string;
 };
 
+type RemoteExpensePayer = {
+  participantId?: string;
+  participant_id?: string;
+  amountCents?: number;
+  amount_cents?: number;
+};
+
+type RemoteExpenseSplit = RemoteExpensePayer;
+
 type RemoteExpense = {
   id: string;
   group_id: string;
   title: string;
   amount_cents: number;
-  paid_by_participant_id: string;
-  split_participant_ids: string[];
+  paid_by_participant_id: string | null;
+  split_participant_ids: string[] | null;
+  payer_mode?: 'single' | 'multiple';
+  split_mode?: 'equal' | 'manual';
+  payerMode?: 'single' | 'multiple';
+  splitMode?: 'equal' | 'manual';
+  payers?: RemoteExpensePayer[];
+  splits?: RemoteExpenseSplit[];
   date: string;
   created_at: string;
   settlement_cycle_id: string | null;
@@ -38,6 +65,17 @@ type RemoteSettlementCycle = {
   closed_at: string;
 };
 
+type RemoteSettlementPayment = {
+  id: string;
+  group_id: string;
+  from_participant_id: string;
+  to_participant_id: string;
+  amount_cents: number;
+  created_by_auth_user_id: string;
+  created_at: string;
+  voided_at: string | null;
+};
+
 type RemoteMembership = {
   id: string;
   group_id: string;
@@ -47,6 +85,14 @@ type RemoteMembership = {
   status: 'active' | 'revoked';
   joined_at: string;
   last_seen_at: string;
+};
+
+type RemoteProfile = {
+  auth_user_id: string;
+  display_name: string | null;
+  payment_alias: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type GroupMemberView = GroupMembership & {
@@ -64,6 +110,7 @@ type RemoteGroupData = {
   participants?: RemoteParticipant[];
   expenses?: RemoteExpense[];
   settlementCycles?: RemoteSettlementCycle[];
+  settlementPayments?: RemoteSettlementPayment[];
   memberships?: RemoteMembership[];
   currentMembership?: RemoteMembership | null;
   accessStatus?: GroupDataAccess;
@@ -105,14 +152,28 @@ function mapParticipant(participant: RemoteParticipant): Participant {
   };
 }
 
+function mapExpensePayer(payer: RemoteExpensePayer): ExpensePayer | null {
+  const participantId = payer.participantId ?? payer.participant_id;
+  const amountCents = payer.amountCents ?? payer.amount_cents;
+  if (!participantId || typeof amountCents !== 'number') return null;
+  return { participantId, amountCents };
+}
+
 function mapExpense(expense: RemoteExpense): Expense {
+  const payers = (expense.payers ?? []).map(mapExpensePayer).filter((item): item is ExpensePayer => Boolean(item));
+  const splits = (expense.splits ?? []).map(mapExpensePayer).filter((item): item is ExpenseSplit => Boolean(item));
+
   return {
     id: expense.id,
     groupId: expense.group_id,
     title: expense.title,
     amountCents: expense.amount_cents,
-    paidByParticipantId: expense.paid_by_participant_id,
-    splitParticipantIds: expense.split_participant_ids,
+    paidByParticipantId: expense.paid_by_participant_id ?? undefined,
+    splitParticipantIds: expense.split_participant_ids ?? [],
+    payerMode: expense.payerMode ?? expense.payer_mode ?? 'single',
+    splitMode: expense.splitMode ?? expense.split_mode ?? 'equal',
+    payers,
+    splits,
     date: expense.date,
     createdAt: expense.created_at,
     settlementCycleId: expense.settlement_cycle_id
@@ -128,6 +189,19 @@ function mapSettlementCycle(cycle: RemoteSettlementCycle): SettlementCycle {
   };
 }
 
+function mapSettlementPayment(payment: RemoteSettlementPayment): SettlementPayment {
+  return {
+    id: payment.id,
+    groupId: payment.group_id,
+    fromParticipantId: payment.from_participant_id,
+    toParticipantId: payment.to_participant_id,
+    amountCents: payment.amount_cents,
+    createdByAuthUserId: payment.created_by_auth_user_id,
+    createdAt: payment.created_at,
+    voidedAt: payment.voided_at
+  };
+}
+
 function mapMembership(membership: RemoteMembership): GroupMembership {
   return {
     id: membership.id,
@@ -138,6 +212,16 @@ function mapMembership(membership: RemoteMembership): GroupMembership {
     status: membership.status,
     joinedAt: membership.joined_at,
     lastSeenAt: membership.last_seen_at
+  };
+}
+
+function mapProfile(profile: RemoteProfile): Profile {
+  return {
+    authUserId: profile.auth_user_id,
+    displayName: profile.display_name,
+    paymentAlias: profile.payment_alias,
+    createdAt: profile.created_at,
+    updatedAt: profile.updated_at
   };
 }
 
@@ -155,6 +239,7 @@ function emptyRemoteState(): AppState {
     participants: [],
     expenses: [],
     settlementCycles: [],
+    settlementPayments: [],
     memberships: [],
     currentMembership: null,
     accessStatus: 'requires_join',
@@ -171,6 +256,7 @@ function mapGroupData(data: RemoteGroupData): AppState {
     participants: (data.participants ?? []).map(mapParticipant),
     expenses: (data.expenses ?? []).map(mapExpense),
     settlementCycles: (data.settlementCycles ?? []).map(mapSettlementCycle),
+    settlementPayments: (data.settlementPayments ?? []).map(mapSettlementPayment),
     memberships: (data.memberships ?? []).map(mapMembership),
     currentMembership: data.currentMembership ? mapMembership(data.currentMembership) : null,
     accessStatus,
@@ -182,6 +268,24 @@ function assertData<T>(data: T | null, error: { message: string } | null, fallba
   if (error) throw new Error(error.message || fallbackMessage);
   if (!data) throw new Error(fallbackMessage);
   return data;
+}
+
+function expensePayload(expense: Omit<Expense, 'id' | 'createdAt'> | Expense) {
+  return {
+    p_title: expense.title,
+    p_amount_cents: expense.amountCents,
+    p_date: expense.date,
+    p_payers: (expense.payers ?? []).map((payer) => ({
+      participantId: payer.participantId,
+      amountCents: payer.amountCents
+    })),
+    p_splits: (expense.splits ?? []).map((split) => ({
+      participantId: split.participantId,
+      amountCents: split.amountCents
+    })),
+    p_payer_mode: expense.payerMode ?? 'single',
+    p_split_mode: expense.splitMode ?? 'equal'
+  };
 }
 
 export async function loadMyGroups(): Promise<AppState> {
@@ -200,16 +304,38 @@ export async function loadMyGroups(): Promise<AppState> {
 export async function loadGroupByShareToken(shareToken: string): Promise<AppState> {
   const client = getSupabaseClient();
   const { data, error } = await client.rpc('get_group_data', { p_share_token: shareToken });
-  return mapGroupData(assertData(data as RemoteGroupData | null, error, 'No se pudo cargar la información del grupo.'));
+  return mapGroupData(assertData(data as RemoteGroupData | null, error, 'No se pudo cargar la informacion del grupo.'));
 }
 
-export async function createRemoteGroup(input: { name: string; ownerParticipantName: string }): Promise<Group> {
+export async function getMyProfile(): Promise<Profile | null> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('get_my_profile');
+  if (error) throw new Error(error.message || 'No se pudo cargar tu perfil.');
+  return data ? mapProfile(data as RemoteProfile) : null;
+}
+
+export async function upsertMyProfile(input: { displayName?: string; paymentAlias?: string }): Promise<Profile> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('upsert_my_profile', {
+    p_display_name: input.displayName?.trim() || null,
+    p_payment_alias: input.paymentAlias?.trim() || null
+  });
+
+  return mapProfile(assertData(data as RemoteProfile | null, error, 'No se pudo guardar tu perfil.'));
+}
+
+export async function createRemoteGroup(input: {
+  name: string;
+  ownerParticipantName: string;
+  ownerParticipantAlias?: string;
+}): Promise<Group> {
   const client = getSupabaseClient();
   const shareToken = createShareToken();
   const { data, error } = await client.rpc('create_group_with_owner', {
     p_name: input.name,
     p_share_token: shareToken,
-    p_owner_participant_name: input.ownerParticipantName
+    p_owner_participant_name: input.ownerParticipantName,
+    p_owner_participant_alias: input.ownerParticipantAlias ?? null
   });
 
   return mapGroup(assertData(data as RemoteGroup | null, error, 'No se pudo crear el grupo.'));
@@ -278,11 +404,7 @@ export async function createRemoteExpense(
   const client = getSupabaseClient();
   const { data, error } = await client.rpc('create_expense_by_token', {
     p_share_token: shareToken,
-    p_title: input.title,
-    p_amount_cents: input.amountCents,
-    p_paid_by_participant_id: input.paidByParticipantId,
-    p_split_participant_ids: input.splitParticipantIds,
-    p_date: input.date
+    ...expensePayload(input)
   });
 
   return mapExpense(assertData(data as RemoteExpense | null, error, 'No se pudo guardar el gasto.'));
@@ -293,11 +415,7 @@ export async function updateRemoteExpense(shareToken: string, expense: Expense):
   const { data, error } = await client.rpc('update_expense_by_token', {
     p_share_token: shareToken,
     p_expense_id: expense.id,
-    p_title: expense.title,
-    p_amount_cents: expense.amountCents,
-    p_paid_by_participant_id: expense.paidByParticipantId,
-    p_split_participant_ids: expense.splitParticipantIds,
-    p_date: expense.date
+    ...expensePayload(expense)
   });
 
   return mapExpense(assertData(data as RemoteExpense | null, error, 'No se pudo guardar el gasto.'));
@@ -313,13 +431,28 @@ export async function deleteRemoteExpense(shareToken: string, expenseId: string)
   if (error) throw new Error(error.message || 'No se pudo eliminar el gasto.');
 }
 
+export async function createSettlementPaymentByToken(
+  shareToken: string,
+  input: { fromParticipantId: string; toParticipantId: string; amountCents: number }
+): Promise<SettlementPayment> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('create_settlement_payment_by_token', {
+    p_share_token: shareToken,
+    p_from_participant_id: input.fromParticipantId,
+    p_to_participant_id: input.toParticipantId,
+    p_amount_cents: input.amountCents
+  });
+
+  return mapSettlementPayment(assertData(data as RemoteSettlementPayment | null, error, 'No se pudo registrar el pago.'));
+}
+
 export async function closeRemoteSettlementCycle(shareToken: string): Promise<SettlementCycle> {
   const client = getSupabaseClient();
   const { data, error } = await client.rpc('close_cycle_by_token', {
     p_share_token: shareToken
   });
 
-  return mapSettlementCycle(assertData(data as RemoteSettlementCycle | null, error, 'No se pudo cerrar el período.'));
+  return mapSettlementCycle(assertData(data as RemoteSettlementCycle | null, error, 'No se pudo cerrar el periodo.'));
 }
 
 export async function getGroupMembers(shareToken: string): Promise<GroupMemberView[]> {

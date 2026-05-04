@@ -1,4 +1,4 @@
-import type { Balance, Expense, Group, Participant, Settlement } from '../types';
+import type { Balance, Expense, ExpensePayer, ExpenseSplit, Group, Participant, Settlement, SettlementPayment } from '../types';
 
 export function getOpenExpenses(expenses: Expense[]): Expense[] {
   return expenses.filter((expense) => !expense.settlementCycleId);
@@ -7,7 +7,8 @@ export function getOpenExpenses(expenses: Expense[]): Expense[] {
 export function calculateBalances(
   group: Group,
   participants: Participant[],
-  expenses: Expense[]
+  expenses: Expense[],
+  settlementPayments: SettlementPayment[] = []
 ): Balance[] {
   const groupParticipants = participants.filter((participant) => participant.groupId === group.id);
   const participantIds = new Set(groupParticipants.map((participant) => participant.id));
@@ -23,31 +24,60 @@ export function calculateBalances(
   }
 
   for (const expense of getOpenExpenses(expenses).filter((item) => item.groupId === group.id)) {
-    const payerBalance = balances.get(expense.paidByParticipantId);
-    if (payerBalance) {
-      payerBalance.paidCents += expense.amountCents;
+    const payers = resolveExpensePayers(expense);
+    const splits = resolveExpenseSplits(expense, participantIds);
+
+    for (const payer of payers) {
+      const payerBalance = balances.get(payer.participantId);
+      if (payerBalance) payerBalance.paidCents += payer.amountCents;
     }
 
-    const splitIds = expense.splitParticipantIds.filter((id) => participantIds.has(id));
-    if (splitIds.length === 0) continue;
-
-    const baseShare = Math.floor(expense.amountCents / splitIds.length);
-    let remainder = expense.amountCents - baseShare * splitIds.length;
-
-    for (const participantId of splitIds) {
-      const participantBalance = balances.get(participantId);
+    for (const split of splits) {
+      const participantBalance = balances.get(split.participantId);
       if (!participantBalance) continue;
-
-      const extraCent = remainder > 0 ? 1 : 0;
-      participantBalance.owedCents += baseShare + extraCent;
-      remainder -= extraCent;
+      participantBalance.owedCents += split.amountCents;
     }
+  }
+
+  for (const payment of settlementPayments.filter((item) => item.groupId === group.id && !item.voidedAt)) {
+    const fromBalance = balances.get(payment.fromParticipantId);
+    if (fromBalance) fromBalance.paidCents += payment.amountCents;
+
+    const toBalance = balances.get(payment.toParticipantId);
+    if (toBalance) toBalance.owedCents += payment.amountCents;
   }
 
   return Array.from(balances.values()).map((balance) => ({
     ...balance,
     balanceCents: balance.paidCents - balance.owedCents
   }));
+}
+
+function resolveExpensePayers(expense: Expense): ExpensePayer[] {
+  if (expense.payers?.length) {
+    return expense.payers.filter((payer) => payer.amountCents > 0);
+  }
+
+  if (!expense.paidByParticipantId) return [];
+  return [{ participantId: expense.paidByParticipantId, amountCents: expense.amountCents }];
+}
+
+function resolveExpenseSplits(expense: Expense, participantIds: Set<string>): ExpenseSplit[] {
+  if (expense.splits?.length) {
+    return expense.splits.filter((split) => participantIds.has(split.participantId) && split.amountCents >= 0);
+  }
+
+  const splitIds = (expense.splitParticipantIds ?? []).filter((id) => participantIds.has(id));
+  if (splitIds.length === 0) return [];
+
+  const baseShare = Math.floor(expense.amountCents / splitIds.length);
+  let remainder = expense.amountCents - baseShare * splitIds.length;
+
+  return splitIds.map((participantId) => {
+    const extraCent = remainder > 0 ? 1 : 0;
+    remainder -= extraCent;
+    return { participantId, amountCents: baseShare + extraCent };
+  });
 }
 
 export function simplifySettlements(balances: Balance[]): Settlement[] {

@@ -14,13 +14,27 @@ export type Participant = {
   isActive: boolean;
 };
 
+export type ExpensePayer = {
+  participantId: string;
+  amountCents: number;
+};
+
+export type ExpenseSplit = {
+  participantId: string;
+  amountCents: number;
+};
+
 export type Expense = {
   id: string;
   groupId: string;
   title: string;
   amountCents: number;
-  paidByParticipantId: string;
-  splitParticipantIds: string[];
+  paidByParticipantId?: string;
+  splitParticipantIds?: string[];
+  payerMode?: 'single' | 'multiple';
+  splitMode?: 'equal' | 'manual';
+  payers?: ExpensePayer[];
+  splits?: ExpenseSplit[];
   date: string;
   createdAt: string;
   settlementCycleId?: string | null;
@@ -46,6 +60,25 @@ export type Settlement = {
   amountCents: number;
 };
 
+export type SettlementPayment = {
+  id: string;
+  groupId: string;
+  fromParticipantId: string;
+  toParticipantId: string;
+  amountCents: number;
+  createdByAuthUserId: string;
+  createdAt: string;
+  voidedAt?: string | null;
+};
+
+export type Profile = {
+  authUserId: string;
+  displayName?: string | null;
+  paymentAlias?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type GroupMembership = {
   id: string;
   groupId: string;
@@ -64,6 +97,7 @@ export type AppState = {
   participants: Participant[];
   expenses: Expense[];
   settlementCycles: SettlementCycle[];
+  settlementPayments: SettlementPayment[];
   memberships?: GroupMembership[];
   currentMembership?: GroupMembership | null;
   accessStatus?: GroupDataAccess;

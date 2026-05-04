@@ -5,14 +5,24 @@ type JoinGroupCardProps = {
   group: Group;
   participants: Participant[];
   claimedParticipantIds?: string[];
+  defaultName?: string;
+  defaultAlias?: string;
   onJoin: (input: { participantId?: string | null; newParticipantName?: string; newParticipantAlias?: string }) => Promise<void>;
   onBack: () => void;
 };
 
-export function JoinGroupCard({ group, participants, claimedParticipantIds = [], onJoin, onBack }: JoinGroupCardProps) {
+export function JoinGroupCard({
+  group,
+  participants,
+  claimedParticipantIds = [],
+  defaultName = '',
+  defaultAlias = '',
+  onJoin,
+  onBack
+}: JoinGroupCardProps) {
   const [selectedParticipantId, setSelectedParticipantId] = useState('');
-  const [name, setName] = useState('');
-  const [alias, setAlias] = useState('');
+  const [name, setName] = useState(defaultName);
+  const [alias, setAlias] = useState(defaultAlias);
   const [error, setError] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(false);
   const activeParticipants = participants.filter((participant) => participant.isActive);

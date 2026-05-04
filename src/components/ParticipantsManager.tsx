@@ -28,8 +28,10 @@ export function ParticipantsManager({
   const participantIdsWithExpenses = useMemo(() => {
     const ids = new Set<string>();
     for (const expense of expenses.filter((item) => item.groupId === groupId)) {
-      ids.add(expense.paidByParticipantId);
-      expense.splitParticipantIds.forEach((id) => ids.add(id));
+      if (expense.paidByParticipantId) ids.add(expense.paidByParticipantId);
+      (expense.splitParticipantIds ?? []).forEach((id) => ids.add(id));
+      (expense.payers ?? []).forEach((payer) => ids.add(payer.participantId));
+      (expense.splits ?? []).forEach((split) => ids.add(split.participantId));
     }
     return ids;
   }, [expenses, groupId]);
@@ -51,14 +53,9 @@ export function ParticipantsManager({
   async function handleRemove(participant: Participant) {
     const hasExpenses = participantIdsWithExpenses.has(participant.id);
     try {
-      if (hasExpenses) {
-        await onUpdateParticipant({ ...participant, isActive: false });
-        setError(null);
-        return;
-      }
-
       await onUpdateParticipant({ ...participant, isActive: false });
       setError(null);
+      if (!hasExpenses) return;
     } catch {
       setError('No se pudo guardar el participante.');
     }
@@ -100,7 +97,7 @@ export function ParticipantsManager({
 
       <div className="grid gap-2">
         {visibleParticipants.length === 0 ? (
-          <p className="rounded-lg bg-white p-4 text-sm text-slate-500">Agregá participantes para empezar.</p>
+          <p className="rounded-lg bg-white p-4 text-sm text-slate-500">Agrega participantes para empezar.</p>
         ) : (
           visibleParticipants.map((participant) => (
             <div
@@ -110,8 +107,8 @@ export function ParticipantsManager({
               <div>
                 <p className="font-medium text-slate-900">{participant.name}</p>
                 <p className="text-sm text-slate-500">
-                  {participant.alias ? participant.alias : 'Sin alias'} ·{' '}
-                  {participant.isActive ? 'Activo' : 'Inactivo'}
+                  <span>{participant.alias ? `Alias: ${participant.alias}` : 'Sin alias cargado'}</span>
+                  <span> · {participant.isActive ? 'Activo' : 'Inactivo'}</span>
                 </p>
               </div>
               {participant.isActive ? (
