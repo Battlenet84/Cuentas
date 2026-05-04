@@ -1,0 +1,97 @@
+import { FormEvent, useState } from 'react';
+import { updatePassword } from '../data/auth';
+
+type ResetPasswordScreenProps = {
+  onDone: () => void;
+};
+
+export function ResetPasswordScreen({ onDone }: ResetPasswordScreenProps) {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUpdated, setIsUpdated] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!password) {
+      setError('Ingresa tu nueva contrasena.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('La contrasena tiene que tener al menos 6 caracteres.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Las contrasenas no coinciden.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await updatePassword(password);
+      setError(null);
+      setIsUpdated(true);
+    } catch {
+      setError('No pudimos actualizar la contrasena. Volve a pedir el email de recuperacion.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center bg-slate-50 px-4 py-6">
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="text-sm font-medium text-teal-700">Cuentas Claras</p>
+        <h1 className="mt-2 text-2xl font-semibold text-slate-950">Restablecer contrasena</h1>
+
+        {isUpdated ? (
+          <div className="mt-4 grid gap-4">
+            <p className="rounded-md bg-teal-50 p-3 text-sm font-medium text-teal-800">
+              Contrasena actualizada correctamente.
+            </p>
+            <button
+              type="button"
+              onClick={onDone}
+              className="min-h-11 rounded-md bg-teal-700 px-4 font-semibold text-white"
+            >
+              Ir a la app
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="mt-4 grid gap-3">
+            {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+            <label className="grid gap-1 text-sm font-medium text-slate-700">
+              Nueva contrasena
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+                autoComplete="new-password"
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-medium text-slate-700">
+              Repetir contrasena
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+                autoComplete="new-password"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="min-h-11 rounded-md bg-teal-700 px-4 font-semibold text-white disabled:bg-slate-300"
+            >
+              {isSubmitting ? 'Guardando...' : 'Guardar nueva contrasena'}
+            </button>
+          </form>
+        )}
+      </section>
+    </main>
+  );
+}

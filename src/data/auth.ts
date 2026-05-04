@@ -40,6 +40,19 @@ export async function signOut(): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+export async function resetPasswordForEmail(email: string, redirectTo: string): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+  if (error) throw new Error(error.message);
+}
+
+export async function updatePassword(newPassword: string): Promise<User> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error || !data.user) throw new Error(error?.message || 'No se pudo actualizar la contrasena.');
+  return data.user;
+}
+
 export async function getCurrentSession(): Promise<Session | null> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.auth.getSession();

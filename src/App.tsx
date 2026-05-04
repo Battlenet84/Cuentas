@@ -4,6 +4,7 @@ import { GroupDetail } from './components/GroupDetail';
 import { GroupList } from './components/GroupList';
 import { JoinGroupCard } from './components/JoinGroupCard';
 import { AuthScreen } from './components/AuthScreen';
+import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import {
   assignSettlementCycleToExpenses,
   createExpense,
@@ -39,7 +40,7 @@ import {
   voidSettlementPaymentByToken
 } from './data/supabaseStorage';
 import { subscribeToGroupChanges, type RealtimeStatus } from './data/realtime';
-import { getCurrentSession, listenToAuthChanges, signInWithEmail, signOut, signUpWithEmail } from './data/auth';
+import { getCurrentSession, listenToAuthChanges, resetPasswordForEmail, signInWithEmail, signOut, signUpWithEmail } from './data/auth';
 import { getOpenExpenses } from './lib/calculations';
 import { createId, createShareToken } from './lib/ids';
 import { isSupabaseConfigured, supabaseConfigError } from './lib/supabase';
@@ -48,9 +49,12 @@ import type { AppState, Expense, Participant, Profile, Settlement } from './type
 type Route =
   | { kind: 'home' }
   | { kind: 'localGroup'; groupId: string }
-  | { kind: 'sharedGroup'; shareToken: string };
+  | { kind: 'sharedGroup'; shareToken: string }
+  | { kind: 'resetPassword' };
 
 function routeFromLocation(pathname: string, search: string): Route {
+  if (pathname === '/reset-password') return { kind: 'resetPassword' };
+
   const shareToken = new URLSearchParams(search).get('share');
   if (shareToken) return { kind: 'sharedGroup', shareToken };
 
@@ -66,6 +70,7 @@ function routeFromLocation(pathname: string, search: string): Route {
 function routePath(route: Route): string {
   if (route.kind === 'sharedGroup') return `/g/${encodeURIComponent(route.shareToken)}`;
   if (route.kind === 'localGroup') return `/group/${encodeURIComponent(route.groupId)}`;
+  if (route.kind === 'resetPassword') return '/reset-password';
   return '/';
 }
 
@@ -321,6 +326,10 @@ function App() {
     setAuthUserId(session?.user.id ?? null);
     setProfile(await upsertMyProfile(signupProfile));
     setAuthError(null);
+  }
+
+  async function handleResetPasswordEmail(email: string) {
+    await resetPasswordForEmail(email, `${window.location.origin}/reset-password`);
   }
 
   async function handleSignOut() {
@@ -586,8 +595,12 @@ function App() {
     );
   }
 
+  if (route.kind === 'resetPassword') {
+    return <ResetPasswordScreen onDone={() => navigate({ kind: 'home' }, true)} />;
+  }
+
   if (isSupabaseConfigured && !authUserId) {
-    return <AuthScreen onSignIn={handleSignIn} onSignUp={handleSignUp} />;
+    return <AuthScreen onSignIn={handleSignIn} onSignUp={handleSignUp} onResetPassword={handleResetPasswordEmail} />;
   }
 
   if (isLoadingGroup) {

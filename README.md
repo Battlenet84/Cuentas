@@ -46,12 +46,30 @@ No subir `.env.local`.
    - Enable automatic RLS: ON
    - Authentication > Providers > Email: ON
    - Authentication > Providers > Email > Confirm email: OFF
+   - Authentication > URL Configuration > Redirect URLs:
+     - `https://cuentas-five.vercel.app/reset-password`
+     - `http://localhost:5173/reset-password`
 3. Ejecutar completo `supabase/schema.sql` en SQL Editor.
 4. Copiar Project URL y Publishable key.
 5. Completar `.env.local`.
 6. En Vercel, cargar las mismas variables y redeploy.
 
 Anonymous Auth ya no es necesario para el flujo principal. Puede quedar apagado o sin uso.
+
+## Recuperacion de contrasena
+
+Desde la pantalla de Entrar, el usuario puede tocar "Olvide mi contrasena", ingresar su email y recibir un link de Supabase para restablecerla.
+
+Supabase debe tener configuradas estas Redirect URLs:
+
+```text
+https://cuentas-five.vercel.app/reset-password
+http://localhost:5173/reset-password
+```
+
+Al abrir el link, la app muestra `/reset-password`, pide nueva contrasena y confirmacion, y guarda el cambio con Supabase Auth.
+
+Supabase usa email para enviar el link de recuperacion. En proyectos gratis o de desarrollo puede haber limites de envio; mas adelante conviene configurar SMTP propio.
 
 ## Usuarios, perfiles y participantes
 
@@ -186,7 +204,6 @@ No se usa `service_role` en frontend. No hay secrets en el codigo. RLS queda act
 
 - Google login.
 - Magic links.
-- Recuperacion de contrasena.
 - Confirmacion de email.
 - Porcentajes en divisiones.
 - Anular pagos registrados.
