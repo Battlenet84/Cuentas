@@ -39,7 +39,7 @@ export function calculateBalances(
     }
   }
 
-  for (const payment of settlementPayments.filter((item) => item.groupId === group.id && !item.voidedAt)) {
+  for (const payment of getOpenSettlementPayments(settlementPayments).filter((item) => item.groupId === group.id)) {
     const fromBalance = balances.get(payment.fromParticipantId);
     if (fromBalance) fromBalance.paidCents += payment.amountCents;
 
@@ -51,6 +51,14 @@ export function calculateBalances(
     ...balance,
     balanceCents: balance.paidCents - balance.owedCents
   }));
+}
+
+export function getOpenSettlementPayments(settlementPayments: SettlementPayment[]): SettlementPayment[] {
+  return settlementPayments.filter((payment) => !payment.voidedAt && !payment.settlementCycleId);
+}
+
+export function calculatePendingSettlementCents(settlements: Settlement[]): number {
+  return settlements.reduce((total, settlement) => total + settlement.amountCents, 0);
 }
 
 function resolveExpensePayers(expense: Expense): ExpensePayer[] {

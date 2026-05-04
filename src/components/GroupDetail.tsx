@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Expense, Group, GroupMembership, Participant, Settlement, SettlementCycle, SettlementPayment } from '../types';
 import type { GroupMemberView } from '../data/supabaseStorage';
 import type { RealtimeStatus } from '../data/realtime';
-import { calculateBalances, getOpenExpenses, simplifySettlements } from '../lib/calculations';
+import {
+  calculateBalances,
+  calculatePendingSettlementCents,
+  getOpenExpenses,
+  getOpenSettlementPayments,
+  simplifySettlements
+} from '../lib/calculations';
 import { formatARS } from '../lib/money';
 import { BalanceSummary } from './BalanceSummary';
 import { ExpenseForm } from './ExpenseForm';
@@ -31,6 +37,7 @@ type GroupDetailProps = {
   onUpdateExpense: (expense: Expense) => void | Promise<void>;
   onDeleteExpense: (expenseId: string) => void | Promise<void>;
   onSettleDebt?: (settlement: Settlement) => void | Promise<void>;
+  onVoidSettlementPayment?: (paymentId: string) => void | Promise<void>;
   onCloseOpenExpenses: () => void | Promise<void>;
   onRetry?: () => void | Promise<void>;
   onManualRefresh?: () => void | Promise<void>;
@@ -50,7 +57,7 @@ const desktopTabs: Array<{ id: GroupTab; label: string }> = [
   { id: 'summary', label: 'Resumen' },
   { id: 'expenses', label: 'Gastos' },
   { id: 'participants', label: 'Participantes' },
-  { id: 'more', label: 'Más' }
+  { id: 'more', label: 'Mas' }
 ];
 
 export function GroupDetail({
@@ -69,6 +76,7 @@ export function GroupDetail({
   onUpdateExpense,
   onDeleteExpense,
   onSettleDebt,
+  onVoidSettlementPayment,
   onCloseOpenExpenses,
   onRetry,
   onManualRefresh,
@@ -87,19 +95,22 @@ export function GroupDetail({
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [isExpensePanelOpen, setIsExpensePanelOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+
   const groupParticipants = participants.filter((participant) => participant.groupId === group.id);
   const groupExpenses = expenses.filter((expense) => expense.groupId === group.id);
   const groupCycles = settlementCycles.filter((cycle) => cycle.groupId === group.id);
-  const groupSettlementPayments = settlementPayments.filter((payment) => payment.groupId === group.id && !payment.voidedAt);
+  const openSettlementPayments = getOpenSettlementPayments(settlementPayments.filter((payment) => payment.groupId === group.id));
+  const voidedSettlementPayments = settlementPayments.filter((payment) => payment.groupId === group.id && payment.voidedAt);
   const isOwner = currentMembership?.role === 'owner' && currentMembership.status === 'active';
   const openExpenses = getOpenExpenses(groupExpenses);
   const totalOpenCents = openExpenses.reduce((total, expense) => total + expense.amountCents, 0);
 
   const balances = useMemo(
-    () => calculateBalances(group, groupParticipants, groupExpenses, groupSettlementPayments),
-    [group, groupParticipants, groupExpenses, groupSettlementPayments]
+    () => calculateBalances(group, groupParticipants, groupExpenses, openSettlementPayments),
+    [group, groupParticipants, groupExpenses, openSettlementPayments]
   );
   const settlements = useMemo(() => simplifySettlements(balances), [balances]);
+  const pendingSettlementCents = useMemo(() => calculatePendingSettlementCents(settlements), [settlements]);
 
   useEffect(() => {
     onExpensePanelOpenChange?.(isExpensePanelOpen);
@@ -114,12 +125,20 @@ export function GroupDetail({
   }
 
   function buildWhatsAppSummary(): string {
-    const lines = [`Resumen de "${group.name}"`, '', `Total abierto: ${formatARS(totalOpenCents)}`, '', 'Para saldar:'];
-    if (settlements.length === 0) lines.push('Todo está saldado.');
+    const lines = [
+      `Resumen de "${group.name}"`,
+      '',
+      `Total gastado: ${formatARS(totalOpenCents)}`,
+      `Pendiente por saldar: ${formatARS(pendingSettlementCents)}`,
+      '',
+      'Para saldar:'
+    ];
+
+    if (settlements.length === 0) lines.push('Todo esta saldado.');
     else {
       for (const settlement of settlements) {
         const alias = participantAlias(settlement.toParticipantId);
-        const aliasText = alias ? ` - Alias: ${alias}` : '';
+        const aliasText = alias ? ` — Alias: ${alias}` : '';
         lines.push(
           `- ${participantName(settlement.fromParticipantId)} le paga ${formatARS(settlement.amountCents)} a ${participantName(
             settlement.toParticipantId
@@ -127,6 +146,7 @@ export function GroupDetail({
         );
       }
     }
+
     return lines.join('\n');
   }
 
@@ -138,7 +158,7 @@ export function GroupDetail({
 
   function syncLabel(): string {
     if (syncStatus === 'connecting') return 'Conectando tiempo real...';
-    if (syncStatus === 'connected') return lastSyncAt ? 'Actualizado recién' : 'Tiempo real activo';
+    if (syncStatus === 'connected') return lastSyncAt ? 'Actualizado recien' : 'Tiempo real activo';
     if (syncStatus === 'syncing') return 'Actualizando...';
     if (syncStatus === 'error') return 'No se pudo sincronizar';
     return '';
@@ -178,11 +198,16 @@ export function GroupDetail({
   }
 
   async function handleClose() {
-    if (openExpenses.length === 0) return;
+    if (openExpenses.length === 0 || pendingSettlementCents > 0) return;
     const confirmed = window.confirm(
-      'Esto va a sacar los gastos abiertos del balance actual. Usalo solo si ya registraron o acordaron los pagos.'
+      'Esto va a archivar los gastos y pagos abiertos del periodo. Usalo solo si ya esta todo saldado.'
     );
     if (confirmed) await onCloseOpenExpenses();
+  }
+
+  async function handleVoidPayment(paymentId: string) {
+    const confirmed = window.confirm('¿Queres anular este pago registrado?');
+    if (confirmed) await onVoidSettlementPayment?.(paymentId);
   }
 
   const expenseForm = (
@@ -217,17 +242,76 @@ export function GroupDetail({
       />
     ) : null;
 
+  function renderPayments() {
+    return (
+      <>
+        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="text-base font-semibold text-slate-900">Pagos registrados</h2>
+          {openSettlementPayments.length === 0 ? (
+            <p className="text-sm text-slate-500">Todavia no hay pagos registrados.</p>
+          ) : (
+            <div className="grid gap-2">
+              {openSettlementPayments
+                .slice()
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                .map((payment) => (
+                  <div key={payment.id} className="rounded-md border border-slate-200 p-3 text-sm text-slate-700">
+                    <p>
+                      <span className="font-semibold">{participantName(payment.fromParticipantId)}</span> le pago{' '}
+                      <span className="font-semibold">{formatARS(payment.amountCents)}</span> a{' '}
+                      <span className="font-semibold">{participantName(payment.toParticipantId)}</span>
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">{new Date(payment.createdAt).toLocaleDateString('es-AR')}</p>
+                    {onVoidSettlementPayment ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleVoidPayment(payment.id)}
+                        className="mt-3 rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700"
+                      >
+                        Anular
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+            </div>
+          )}
+        </section>
+
+        {voidedSettlementPayments.length > 0 ? (
+          <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+            <h2 className="text-base font-semibold text-slate-900">Pagos anulados</h2>
+            {voidedSettlementPayments
+              .slice()
+              .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+              .map((payment) => (
+                <div key={payment.id} className="rounded-md border border-slate-200 p-3 text-sm text-slate-500">
+                  {participantName(payment.fromParticipantId)} le habia pagado {formatARS(payment.amountCents)} a{' '}
+                  {participantName(payment.toParticipantId)}
+                </div>
+              ))}
+          </section>
+        ) : null}
+      </>
+    );
+  }
+
   function renderTabContent() {
     if (activeTab === 'summary') {
       return (
         <div className="space-y-5">
-          <section className="rounded-lg border border-slate-200 bg-white p-4">
-            <p className="text-sm text-slate-500">Total abierto</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-950">{formatARS(totalOpenCents)}</p>
+          <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2">
+            <div>
+              <p className="text-sm text-slate-500">Total gastado</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-950">{formatARS(totalOpenCents)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Pendiente por saldar</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-950">
+                {pendingSettlementCents > 0 ? formatARS(pendingSettlementCents) : 'Todo saldado'}
+              </p>
+            </div>
           </section>
-          {openExpenses.length === 0 ? (
-            <EmptyState title="Todavía no hay gastos abiertos." />
-          ) : null}
+          {openExpenses.length === 0 ? <EmptyState title="Todavia no hay gastos abiertos." /> : null}
           <SettlementList settlements={settlements} participants={groupParticipants} onSettle={onSettleDebt} />
           <BalanceSummary balances={balances} participants={groupParticipants} />
           <button
@@ -270,49 +354,43 @@ export function GroupDetail({
     return (
       <div className="space-y-5">
         <section className="grid gap-2 rounded-lg border border-slate-200 bg-white p-4">
-          <button type="button" onClick={handleCopyGroupLink} className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800">
+          <button
+            type="button"
+            onClick={handleCopyGroupLink}
+            className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
+          >
             Copiar link del grupo
           </button>
           <button
             type="button"
             onClick={handleClose}
-            disabled={openExpenses.length === 0}
+            disabled={openExpenses.length === 0 || pendingSettlementCents > 0}
             className="min-h-11 rounded-md bg-slate-900 px-4 font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            Cerrar período
+            Cerrar periodo
           </button>
-          <button type="button" onClick={onBack} className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800">
+          {pendingSettlementCents > 0 ? (
+            <p className="text-sm text-slate-600">Solo podes cerrar el periodo cuando el saldo este en cero.</p>
+          ) : null}
+          <button
+            type="button"
+            onClick={onBack}
+            className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
+          >
             Volver a Mis grupos
           </button>
           {onSignOut ? (
-            <button type="button" onClick={onSignOut} className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800">
-              Cerrar sesión
+            <button
+              type="button"
+              onClick={onSignOut}
+              className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
+            >
+              Cerrar sesion
             </button>
           ) : null}
         </section>
         {membersManager}
-        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="text-base font-semibold text-slate-900">Pagos registrados</h2>
-          {groupSettlementPayments.length === 0 ? (
-            <p className="text-sm text-slate-500">Todavia no hay pagos registrados.</p>
-          ) : (
-            <div className="grid gap-2">
-              {groupSettlementPayments
-                .slice()
-                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                .map((payment) => (
-                  <div key={payment.id} className="rounded-md border border-slate-200 p-3 text-sm text-slate-700">
-                    <p>
-                      <span className="font-semibold">{participantName(payment.fromParticipantId)}</span> le pago{' '}
-                      <span className="font-semibold">{formatARS(payment.amountCents)}</span> a{' '}
-                      <span className="font-semibold">{participantName(payment.toParticipantId)}</span>
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">{new Date(payment.createdAt).toLocaleDateString('es-AR')}</p>
-                  </div>
-                ))}
-            </div>
-          )}
-        </section>
+        {renderPayments()}
         <SettlementCyclesList cycles={groupCycles} expenses={groupExpenses} />
       </div>
     );
@@ -333,7 +411,7 @@ export function GroupDetail({
             </button>
           </div>
           <p className="mt-3 text-sm text-slate-200">
-            {groupParticipants.length} participantes · {groupExpenses.length} gastos · Abierto {formatARS(totalOpenCents)}
+            {groupParticipants.length} participantes · {groupExpenses.length} gastos · Pendiente {formatARS(pendingSettlementCents)}
           </p>
         </header>
 

@@ -35,7 +35,8 @@ import {
   type GroupMemberView,
   updateMyGroupIdentity,
   updateRemoteExpense,
-  updateRemoteParticipant
+  updateRemoteParticipant,
+  voidSettlementPaymentByToken
 } from './data/supabaseStorage';
 import { subscribeToGroupChanges, type RealtimeStatus } from './data/realtime';
 import { getCurrentSession, listenToAuthChanges, signInWithEmail, signOut, signUpWithEmail } from './data/auth';
@@ -524,6 +525,16 @@ function App() {
     );
   }
 
+  async function handleVoidSettlementPayment(paymentId: string) {
+    if (route.kind !== 'sharedGroup') return;
+
+    await runRemoteOperation(
+      route.shareToken,
+      () => voidSettlementPaymentByToken(route.shareToken, paymentId).then(() => undefined),
+      'No se pudo anular el pago.'
+    );
+  }
+
   async function handleCloseOpenExpenses(groupId: string) {
     if (route.kind === 'sharedGroup') {
       await runRemoteOperation(
@@ -636,6 +647,7 @@ function App() {
             onUpdateExpense={handleUpdateExpense}
             onDeleteExpense={handleDeleteExpense}
             onSettleDebt={route.kind === 'sharedGroup' ? handleSettleDebt : undefined}
+            onVoidSettlementPayment={route.kind === 'sharedGroup' ? handleVoidSettlementPayment : undefined}
             onCloseOpenExpenses={() => handleCloseOpenExpenses(selectedGroup.id)}
             onRetry={route.kind === 'sharedGroup' ? () => refreshRemoteGroup(route.shareToken) : undefined}
             onManualRefresh={route.kind === 'sharedGroup' ? () => refreshRemoteGroup(route.shareToken, { quiet: true }) : undefined}

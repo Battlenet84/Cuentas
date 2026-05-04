@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateBalances, getOpenExpenses, simplifySettlements } from './calculations';
+import { calculateBalances, calculatePendingSettlementCents, getOpenExpenses, simplifySettlements } from './calculations';
 import type { Expense, Group, Participant, SettlementPayment } from '../types';
 
 const group: Group = {
@@ -42,6 +42,7 @@ function payment(partial: Partial<SettlementPayment>): SettlementPayment {
     amountCents: partial.amountCents ?? 0,
     createdByAuthUserId: 'user_1',
     createdAt: '2026-05-01T00:00:00.000Z',
+    settlementCycleId: partial.settlementCycleId ?? null,
     voidedAt: partial.voidedAt ?? null
   };
 }
@@ -193,5 +194,52 @@ describe('calculations', () => {
 
     expect(before).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000 }]);
     expect(after).toEqual([]);
+  });
+
+  it('ignora pagos individuales anulados', () => {
+    const expenses = [
+      expense({
+        amountCents: 2000000,
+        payers: [{ participantId: 'flor', amountCents: 2000000 }],
+        splits: [
+          { participantId: 'flor', amountCents: 1000000 },
+          { participantId: 'agus', amountCents: 1000000 }
+        ]
+      })
+    ];
+
+    const settlements = simplifySettlements(calculateBalances(group, participants, expenses, [
+      payment({ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000, voidedAt: '2026-05-02T00:00:00.000Z' })
+    ]));
+
+    expect(settlements).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000 }]);
+  });
+
+  it('ignora pagos individuales cerrados', () => {
+    const expenses = [
+      expense({
+        amountCents: 2000000,
+        payers: [{ participantId: 'flor', amountCents: 2000000 }],
+        splits: [
+          { participantId: 'flor', amountCents: 1000000 },
+          { participantId: 'agus', amountCents: 1000000 }
+        ]
+      })
+    ];
+
+    const settlements = simplifySettlements(calculateBalances(group, participants, expenses, [
+      payment({ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000, settlementCycleId: 'cycle_1' })
+    ]));
+
+    expect(settlements).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000 }]);
+  });
+
+  it('calcula pendiente por saldar como suma de settlements', () => {
+    const settlements = [
+      { fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000 },
+      { fromParticipantId: 'tomi', toParticipantId: 'vale', amountCents: 500000 }
+    ];
+
+    expect(calculatePendingSettlementCents(settlements)).toBe(1500000);
   });
 });

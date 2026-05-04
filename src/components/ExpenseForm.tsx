@@ -53,6 +53,8 @@ export function ExpenseForm({
   const amountCents = parseARSInput(amount) ?? 0;
   const payerTotalCents = sumAmounts(payerAmounts);
   const splitTotalCents = sumAmounts(splitAmounts);
+  const allActiveSplitIds = activeParticipants.map((participant) => participant.id);
+  const areAllActiveSplitsSelected = allActiveSplitIds.length > 0 && allActiveSplitIds.every((id) => equalSplitIds.includes(id));
   const draftKey = expense?.id ?? 'new-expense';
   const initializedDraftKeyRef = useRef<string | null>(null);
 
@@ -122,11 +124,11 @@ export function ExpenseForm({
   }
 
   function selectAllSplits() {
-    setEqualSplitIds(availableParticipants.map((participant) => participant.id));
-  }
-
-  function clearSplits() {
-    setEqualSplitIds([]);
+    if (areAllActiveSplitsSelected) {
+      setEqualSplitIds([]);
+      return;
+    }
+    setEqualSplitIds(allActiveSplitIds);
   }
 
   function buildPayers(totalCents: number): ExpensePayer[] {
@@ -174,12 +176,12 @@ export function ExpenseForm({
     const splits = buildSplits(totalCents);
 
     if (payers.length === 0) {
-      setError('Elegi quien pago.');
+      setError('Selecciona al menos una persona que haya pagado.');
       return;
     }
 
     if (splits.length === 0) {
-      setError('Selecciona al menos un participante para dividir.');
+      setError('Selecciona al menos una persona para dividir.');
       return;
     }
 
@@ -299,7 +301,7 @@ export function ExpenseForm({
           </select>
         ) : (
           <div className="grid gap-2">
-            <p className="text-sm text-slate-600">Pagado: {formatARS(payerTotalCents)} de {formatARS(amountCents)}</p>
+            <ProgressLine currentCents={payerTotalCents} totalCents={amountCents} label="Pagado" />
             {availableParticipants.map((participant) => (
               <MoneyRow
                 key={participant.id}
@@ -333,10 +335,7 @@ export function ExpenseForm({
           <div className="grid gap-2">
             <div className="flex gap-2">
               <button type="button" onClick={selectAllSplits} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium">
-                Seleccionar todo
-              </button>
-              <button type="button" onClick={clearSplits} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium">
-                Deseleccionar todo
+                {areAllActiveSplitsSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
               </button>
             </div>
             {availableParticipants.map((participant) => (
@@ -354,7 +353,7 @@ export function ExpenseForm({
           </div>
         ) : (
           <div className="grid gap-2">
-            <p className="text-sm text-slate-600">Asignado: {formatARS(splitTotalCents)} de {formatARS(amountCents)}</p>
+            <ProgressLine currentCents={splitTotalCents} totalCents={amountCents} label="Asignado" />
             {availableParticipants.map((participant) => (
               <MoneyRow
                 key={participant.id}
@@ -386,6 +385,21 @@ export function ExpenseForm({
         ) : null}
       </div>
     </form>
+  );
+}
+
+function ProgressLine({ currentCents, totalCents, label }: { currentCents: number; totalCents: number; label: string }) {
+  const difference = totalCents - currentCents;
+  let detail = '';
+  if (totalCents > 0 && difference > 0) detail = `Faltan ${formatARS(difference)}`;
+  if (totalCents > 0 && difference < 0) detail = `Te pasaste por ${formatARS(Math.abs(difference))}`;
+  if (totalCents > 0 && difference === 0) detail = 'La suma coincide.';
+
+  return (
+    <p className="text-sm text-slate-600">
+      {label}: {formatARS(currentCents)} de {formatARS(totalCents)}
+      {detail ? <span className="ml-1 font-medium text-slate-700">{detail}</span> : null}
+    </p>
   );
 }
 

@@ -73,6 +73,7 @@ type RemoteSettlementPayment = {
   amount_cents: number;
   created_by_auth_user_id: string;
   created_at: string;
+  settlement_cycle_id: string | null;
   voided_at: string | null;
 };
 
@@ -198,6 +199,7 @@ function mapSettlementPayment(payment: RemoteSettlementPayment): SettlementPayme
     amountCents: payment.amount_cents,
     createdByAuthUserId: payment.created_by_auth_user_id,
     createdAt: payment.created_at,
+    settlementCycleId: payment.settlement_cycle_id,
     voidedAt: payment.voided_at
   };
 }
@@ -444,6 +446,16 @@ export async function createSettlementPaymentByToken(
   });
 
   return mapSettlementPayment(assertData(data as RemoteSettlementPayment | null, error, 'No se pudo registrar el pago.'));
+}
+
+export async function voidSettlementPaymentByToken(shareToken: string, paymentId: string): Promise<SettlementPayment> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('void_settlement_payment_by_token', {
+    p_share_token: shareToken,
+    p_payment_id: paymentId
+  });
+
+  return mapSettlementPayment(assertData(data as RemoteSettlementPayment | null, error, 'No se pudo anular el pago.'));
 }
 
 export async function closeRemoteSettlementCycle(shareToken: string): Promise<SettlementCycle> {

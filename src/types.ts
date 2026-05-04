@@ -68,6 +68,7 @@ export type SettlementPayment = {
   amountCents: number;
   createdByAuthUserId: string;
   createdAt: string;
+  settlementCycleId?: string | null;
   voidedAt?: string | null;
 };
 

@@ -87,6 +87,14 @@ Los gastos soportan:
 - division en partes iguales;
 - division manual por monto.
 
+El formulario valida que:
+- la suma pagada coincida con el total;
+- la suma de division manual coincida con el total;
+- haya al menos una persona que pago;
+- haya al menos una persona en la division.
+
+En mobile los inputs de dinero se mantienen como texto mientras escribis, para no perder foco ni cerrar el teclado. Los importes formateados aparecen como ayuda fuera del input.
+
 La fuente nueva de verdad esta en:
 - `expense_payers`
 - `expense_splits`
@@ -111,12 +119,37 @@ Porcentajes quedan para mas adelante.
 
 Cada linea de "Para saldar" tiene boton "Saldar". Eso registra un pago real en `settlement_payments` usando los datos del settlement calculado: quien debe, quien recibe y monto.
 
-Ese pago ajusta el balance actual y se sincroniza por realtime. No hay anulacion de pagos todavia; la tabla ya tiene `voided_at` preparado.
+Cada deuda tambien permite copiar:
+- alias del receptor, si existe;
+- monto sin simbolo `$`, listo para pegar en banco o Mercado Pago.
+
+Ese pago ajusta el balance actual y se sincroniza por realtime.
+
+Si se cargo por error, se puede anular desde "Pagos registrados". La anulacion no borra el pago: completa `voided_at` y deja de afectar el balance.
 
 Importante:
 - "Saldar" registra un pago individual.
-- "Cerrar periodo" archiva/ordena periodos.
-- Cerrar periodo no fue modificado en esta iteracion y sera revisado despues para contemplar pagos individuales y nuevas estructuras de gasto.
+- "Cerrar periodo" archiva gastos y pagos ya saldados.
+- Solo se puede cerrar cuando el saldo esta en cero.
+
+## Resumen de saldos
+
+En Resumen:
+- "Total gastado" suma los gastos abiertos del periodo.
+- "Pendiente por saldar" suma los settlements actuales.
+
+Cuando se registra un pago con "Saldar", "Pendiente por saldar" baja. "Total gastado" no baja porque representa gasto del periodo, no deuda pendiente.
+
+## Cerrar periodo
+
+Cerrar periodo solo esta permitido si no queda nada pendiente por saldar. Si hay settlements, la UI bloquea el boton y la RPC tambien valida la regla.
+
+Al cerrar:
+- se crea un `settlement_cycle`;
+- se asigna `settlement_cycle_id` a gastos abiertos;
+- se asigna `settlement_cycle_id` a pagos individuales activos abiertos.
+
+Los pagos anulados no se archivan como pagos activos ni afectan balances.
 
 ## Tiempo real
 

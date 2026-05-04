@@ -606,6 +606,131 @@ execute function public.notify_group_changed();
 
 NOTIFY pgrst, 'reload schema';
 
+-- Operational polish: void payments and close periods only when fully settled.
+-- This is intentionally the final definition block.
+
+alter table public.settlement_payments
+  add column if not exists settlement_cycle_id uuid null references public.settlement_cycles(id);
+
+create index if not exists settlement_payments_settlement_cycle_id_idx on public.settlement_payments(settlement_cycle_id);
+
+create or replace function public.void_settlement_payment_by_token(
+  p_share_token text,
+  p_payment_id uuid
+)
+returns settlement_payments
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_member_group_id(p_share_token);
+  v_payment settlement_payments%rowtype;
+begin
+  update settlement_payments
+  set voided_at = now()
+  where id = p_payment_id
+    and group_id = v_group_id
+    and voided_at is null
+  returning * into v_payment;
+
+  if not found then
+    raise exception 'No se pudo anular el pago.';
+  end if;
+
+  return v_payment;
+end;
+$$;
+
+create or replace function public.group_has_pending_settlements(p_group_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  with participant_balances as (
+    select p.id,
+      coalesce(paid.total_cents, 0) + coalesce(payments_from.total_cents, 0)
+        - coalesce(owed.total_cents, 0) - coalesce(payments_to.total_cents, 0) as balance_cents
+    from participants p
+    left join (
+      select ep.participant_id, sum(ep.amount_cents)::integer as total_cents
+      from expense_payers ep
+      join expenses e on e.id = ep.expense_id
+      where e.group_id = p_group_id and e.settlement_cycle_id is null
+      group by ep.participant_id
+    ) paid on paid.participant_id = p.id
+    left join (
+      select es.participant_id, sum(es.amount_cents)::integer as total_cents
+      from expense_splits es
+      join expenses e on e.id = es.expense_id
+      where e.group_id = p_group_id and e.settlement_cycle_id is null
+      group by es.participant_id
+    ) owed on owed.participant_id = p.id
+    left join (
+      select from_participant_id as participant_id, sum(amount_cents)::integer as total_cents
+      from settlement_payments
+      where group_id = p_group_id
+        and voided_at is null
+        and settlement_cycle_id is null
+      group by from_participant_id
+    ) payments_from on payments_from.participant_id = p.id
+    left join (
+      select to_participant_id as participant_id, sum(amount_cents)::integer as total_cents
+      from settlement_payments
+      where group_id = p_group_id
+        and voided_at is null
+        and settlement_cycle_id is null
+      group by to_participant_id
+    ) payments_to on payments_to.participant_id = p.id
+    where p.group_id = p_group_id
+  )
+  select exists (select 1 from participant_balances where balance_cents <> 0);
+$$;
+
+create or replace function public.close_cycle_by_token(p_share_token text)
+returns settlement_cycles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_member_group_id(p_share_token);
+  v_cycle settlement_cycles%rowtype;
+begin
+  if not exists (select 1 from expenses where group_id = v_group_id and settlement_cycle_id is null) then
+    raise exception 'No hay gastos abiertos para cerrar.';
+  end if;
+
+  if public.group_has_pending_settlements(v_group_id) then
+    raise exception 'Para cerrar el periodo, primero salda las deudas pendientes.';
+  end if;
+
+  insert into settlement_cycles (group_id, title)
+  values (v_group_id, 'Cierre del ' || to_char((now() at time zone 'America/Argentina/Buenos_Aires')::date, 'DD/MM/YYYY'))
+  returning * into v_cycle;
+
+  update expenses
+  set settlement_cycle_id = v_cycle.id
+  where group_id = v_group_id
+    and settlement_cycle_id is null;
+
+  update settlement_payments
+  set settlement_cycle_id = v_cycle.id
+  where group_id = v_group_id
+    and voided_at is null
+    and settlement_cycle_id is null;
+
+  return v_cycle;
+end;
+$$;
+
+grant execute on function void_settlement_payment_by_token(text, uuid) to authenticated;
+grant execute on function group_has_pending_settlements(uuid) to authenticated;
+grant execute on function close_cycle_by_token(text) to authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
 -- Iteracion: alias de pago, pagos individuales y gastos flexibles.
 -- Ejecutar este bloque completo en SQL Editor. Es re-ejecutable y no modifica close_cycle_by_token.
 
@@ -2369,5 +2494,123 @@ grant execute on function get_group_data(text) to authenticated;
 grant execute on function create_expense_by_token(text, text, integer, date, jsonb, jsonb, text, text) to authenticated;
 grant execute on function update_expense_by_token(text, uuid, text, integer, date, jsonb, jsonb, text, text) to authenticated;
 grant execute on function create_settlement_payment_by_token(text, uuid, uuid, integer) to authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- Operational polish: final effective definitions.
+-- Does not change auth or memberships.
+
+alter table public.settlement_payments
+  add column if not exists settlement_cycle_id uuid null references public.settlement_cycles(id);
+
+create index if not exists settlement_payments_settlement_cycle_id_idx on public.settlement_payments(settlement_cycle_id);
+
+create or replace function public.void_settlement_payment_by_token(
+  p_share_token text,
+  p_payment_id uuid
+)
+returns settlement_payments
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_member_group_id(p_share_token);
+  v_payment settlement_payments%rowtype;
+begin
+  update settlement_payments
+  set voided_at = now()
+  where id = p_payment_id
+    and group_id = v_group_id
+    and voided_at is null
+  returning * into v_payment;
+
+  if not found then
+    raise exception 'No se pudo anular el pago.';
+  end if;
+
+  return v_payment;
+end;
+$$;
+
+create or replace function public.group_has_pending_settlements(p_group_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  with participant_balances as (
+    select p.id,
+      coalesce(paid.total_cents, 0) + coalesce(payments_from.total_cents, 0)
+        - coalesce(owed.total_cents, 0) - coalesce(payments_to.total_cents, 0) as balance_cents
+    from participants p
+    left join (
+      select ep.participant_id, sum(ep.amount_cents)::integer as total_cents
+      from expense_payers ep
+      join expenses e on e.id = ep.expense_id
+      where e.group_id = p_group_id and e.settlement_cycle_id is null
+      group by ep.participant_id
+    ) paid on paid.participant_id = p.id
+    left join (
+      select es.participant_id, sum(es.amount_cents)::integer as total_cents
+      from expense_splits es
+      join expenses e on e.id = es.expense_id
+      where e.group_id = p_group_id and e.settlement_cycle_id is null
+      group by es.participant_id
+    ) owed on owed.participant_id = p.id
+    left join (
+      select from_participant_id as participant_id, sum(amount_cents)::integer as total_cents
+      from settlement_payments
+      where group_id = p_group_id and voided_at is null and settlement_cycle_id is null
+      group by from_participant_id
+    ) payments_from on payments_from.participant_id = p.id
+    left join (
+      select to_participant_id as participant_id, sum(amount_cents)::integer as total_cents
+      from settlement_payments
+      where group_id = p_group_id and voided_at is null and settlement_cycle_id is null
+      group by to_participant_id
+    ) payments_to on payments_to.participant_id = p.id
+    where p.group_id = p_group_id
+  )
+  select exists (select 1 from participant_balances where balance_cents <> 0);
+$$;
+
+create or replace function public.close_cycle_by_token(p_share_token text)
+returns settlement_cycles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_member_group_id(p_share_token);
+  v_cycle settlement_cycles%rowtype;
+begin
+  if not exists (select 1 from expenses where group_id = v_group_id and settlement_cycle_id is null) then
+    raise exception 'No hay gastos abiertos para cerrar.';
+  end if;
+
+  if public.group_has_pending_settlements(v_group_id) then
+    raise exception 'Para cerrar el periodo, primero salda las deudas pendientes.';
+  end if;
+
+  insert into settlement_cycles (group_id, title)
+  values (v_group_id, 'Cierre del ' || to_char((now() at time zone 'America/Argentina/Buenos_Aires')::date, 'DD/MM/YYYY'))
+  returning * into v_cycle;
+
+  update expenses
+  set settlement_cycle_id = v_cycle.id
+  where group_id = v_group_id and settlement_cycle_id is null;
+
+  update settlement_payments
+  set settlement_cycle_id = v_cycle.id
+  where group_id = v_group_id and voided_at is null and settlement_cycle_id is null;
+
+  return v_cycle;
+end;
+$$;
+
+grant execute on function void_settlement_payment_by_token(text, uuid) to authenticated;
+grant execute on function group_has_pending_settlements(uuid) to authenticated;
+grant execute on function close_cycle_by_token(text) to authenticated;
 
 NOTIFY pgrst, 'reload schema';
