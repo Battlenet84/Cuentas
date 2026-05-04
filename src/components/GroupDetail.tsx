@@ -10,7 +10,6 @@ import {
   simplifySettlements
 } from '../lib/calculations';
 import { formatARS } from '../lib/money';
-import { BalanceSummary } from './BalanceSummary';
 import { ExpenseForm } from './ExpenseForm';
 import { ExpenseList } from './ExpenseList';
 import { ParticipantsManager } from './ParticipantsManager';
@@ -19,7 +18,8 @@ import { SettlementList } from './SettlementList';
 import { IdentityCard } from './IdentityCard';
 import { MembersManager } from './MembersManager';
 import { EmptyState } from './EmptyState';
-import { GroupBottomNav, type GroupTab } from './GroupBottomNav';
+import { GroupBottomActionBar } from './GroupBottomActionBar';
+import { GroupTabs, type GroupTab } from './GroupTabs';
 
 type GroupDetailProps = {
   group: Group;
@@ -52,13 +52,6 @@ type GroupDetailProps = {
   syncStatus?: RealtimeStatus;
   lastSyncAt?: string | null;
 };
-
-const desktopTabs: Array<{ id: GroupTab; label: string }> = [
-  { id: 'summary', label: 'Resumen' },
-  { id: 'expenses', label: 'Gastos' },
-  { id: 'participants', label: 'Participantes' },
-  { id: 'more', label: 'Mas' }
-];
 
 export function GroupDetail({
   group,
@@ -312,8 +305,8 @@ export function GroupDetail({
             </div>
           </section>
           {openExpenses.length === 0 ? <EmptyState title="Todavia no hay gastos abiertos." /> : null}
+          {settlements.length === 0 && openExpenses.length > 0 ? <EmptyState title="Todavia no hay deudas pendientes." /> : null}
           <SettlementList settlements={settlements} participants={groupParticipants} onSettle={onSettleDebt} />
-          <BalanceSummary balances={balances} participants={groupParticipants} />
           <button
             type="button"
             onClick={handleCopySummary}
@@ -325,18 +318,25 @@ export function GroupDetail({
       );
     }
 
-    if (activeTab === 'expenses') {
+    if (activeTab === 'movements') {
       return (
-        <ExpenseList
-          expenses={groupExpenses}
-          participants={groupParticipants}
-          onEditExpense={openEditExpensePanel}
-          onDeleteExpense={onDeleteExpense}
-        />
+        <div className="space-y-5">
+          {groupExpenses.length === 0 && openSettlementPayments.length === 0 && groupCycles.length === 0 ? (
+            <EmptyState title="Todavia no hay movimientos." />
+          ) : null}
+          <ExpenseList
+            expenses={groupExpenses}
+            participants={groupParticipants}
+            onEditExpense={openEditExpensePanel}
+            onDeleteExpense={onDeleteExpense}
+          />
+          {renderPayments()}
+          <SettlementCyclesList cycles={groupCycles} expenses={groupExpenses} />
+        </div>
       );
     }
 
-    if (activeTab === 'participants') {
+    if (activeTab === 'people') {
       return (
         <div className="space-y-5">
           {identityCard}
@@ -347,6 +347,7 @@ export function GroupDetail({
             onAddParticipant={onAddParticipant}
             onUpdateParticipant={onUpdateParticipant}
           />
+          {membersManager}
         </div>
       );
     }
@@ -389,15 +390,12 @@ export function GroupDetail({
             </button>
           ) : null}
         </section>
-        {membersManager}
-        {renderPayments()}
-        <SettlementCyclesList cycles={groupCycles} expenses={groupExpenses} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen pb-24 md:pb-0">
+    <div className="min-h-screen pb-28 md:pb-0">
       <div className="space-y-5">
         <header className="rounded-lg bg-slate-900 p-4 text-white md:p-5">
           <div className="flex items-start justify-between gap-3">
@@ -411,29 +409,16 @@ export function GroupDetail({
             </button>
           </div>
           <p className="mt-3 text-sm text-slate-200">
-            {groupParticipants.length} participantes · {groupExpenses.length} gastos · Pendiente {formatARS(pendingSettlementCents)}
+            Pendiente por saldar: {formatARS(pendingSettlementCents)}
           </p>
         </header>
 
-        <div className="hidden items-center justify-between gap-3 md:flex">
-          <div className="flex gap-2 rounded-lg bg-white p-1 shadow-sm">
-            {desktopTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`min-h-10 rounded-md px-4 text-sm font-semibold ${
-                  activeTab === tab.id ? 'bg-teal-700 text-white' : 'text-slate-600'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <GroupTabs activeTab={activeTab} onTabChange={setActiveTab} />
           <button
             type="button"
             onClick={openCreateExpensePanel}
-            className="min-h-10 rounded-md bg-teal-700 px-4 font-semibold text-white"
+            className="hidden min-h-10 rounded-md bg-teal-700 px-4 font-semibold text-white md:inline-flex md:items-center"
           >
             Agregar gasto
           </button>
@@ -466,7 +451,7 @@ export function GroupDetail({
         <main>{renderTabContent()}</main>
       </div>
 
-      <GroupBottomNav activeTab={activeTab} onTabChange={setActiveTab} onAddExpense={openCreateExpensePanel} />
+      <GroupBottomActionBar onAddExpense={openCreateExpensePanel} />
 
       {isExpensePanelOpen ? (
         <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-4">
