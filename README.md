@@ -93,6 +93,18 @@ La fuente nueva de verdad esta en:
 
 Las columnas viejas `paid_by_participant_id` y `split_participant_ids` quedan por compatibilidad. El schema incluye backfill: por cada gasto viejo crea un payer con el pagador original y splits igualitarios entre los participantes guardados. Si el total no divide exacto, reparte centavos restantes de forma deterministica.
 
+Para verificar si quedaron gastos viejos sin backfill:
+
+```sql
+select e.id, e.title
+from public.expenses e
+left join public.expense_payers ep on ep.expense_id = e.id
+left join public.expense_splits es on es.expense_id = e.id
+where ep.id is null or es.id is null;
+```
+
+Si devuelve filas, ejecutar `supabase/schema.sql` completo de nuevo. El archivo incluye el backfill.
+
 Porcentajes quedan para mas adelante.
 
 ## Saldar deuda individual

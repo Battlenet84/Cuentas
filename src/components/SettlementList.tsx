@@ -1,5 +1,6 @@
 import type { Participant, Settlement } from '../types';
 import { formatARS } from '../lib/money';
+import { useState } from 'react';
 
 type SettlementListProps = {
   settlements: Settlement[];
@@ -8,6 +9,7 @@ type SettlementListProps = {
 };
 
 export function SettlementList({ settlements, participants, onSettle }: SettlementListProps) {
+  const [error, setError] = useState<string | null>(null);
   function participant(id: string): Participant | undefined {
     return participants.find((item) => item.id === id);
   }
@@ -21,12 +23,19 @@ export function SettlementList({ settlements, participants, onSettle }: Settleme
     const to = participantName(settlement.toParticipantId);
     const confirmed = window.confirm(`Confirmas que ${from} le pago ${formatARS(settlement.amountCents)} a ${to}?`);
     if (!confirmed) return;
-    await onSettle?.(settlement);
+    try {
+      await onSettle?.(settlement);
+      setError(null);
+    } catch (error) {
+      console.error('No se pudo registrar el pago.', error);
+      setError('No se pudo registrar el pago.');
+    }
   }
 
   return (
     <section className="space-y-3">
       <h2 className="text-base font-semibold text-slate-900">Para saldar</h2>
+      {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
       {settlements.length === 0 ? (
         <p className="rounded-lg border border-teal-100 bg-teal-50 p-4 text-sm font-medium text-teal-800">
           Todo esta saldado.

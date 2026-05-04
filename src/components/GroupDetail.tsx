@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Expense, Group, GroupMembership, Participant, Settlement, SettlementCycle, SettlementPayment } from '../types';
 import type { GroupMemberView } from '../data/supabaseStorage';
 import type { RealtimeStatus } from '../data/realtime';
@@ -34,6 +34,7 @@ type GroupDetailProps = {
   onCloseOpenExpenses: () => void | Promise<void>;
   onRetry?: () => void | Promise<void>;
   onManualRefresh?: () => void | Promise<void>;
+  onExpensePanelOpenChange?: (isOpen: boolean) => void;
   onChangeIdentity?: (participantId: string) => Promise<void>;
   onCreateIdentityParticipant?: (name: string, alias?: string) => Promise<void>;
   onRevokeMember?: (membershipId: string) => Promise<void>;
@@ -71,6 +72,7 @@ export function GroupDetail({
   onCloseOpenExpenses,
   onRetry,
   onManualRefresh,
+  onExpensePanelOpenChange,
   onChangeIdentity,
   onCreateIdentityParticipant,
   onRevokeMember,
@@ -98,6 +100,10 @@ export function GroupDetail({
     [group, groupParticipants, groupExpenses, groupSettlementPayments]
   );
   const settlements = useMemo(() => simplifySettlements(balances), [balances]);
+
+  useEffect(() => {
+    onExpensePanelOpenChange?.(isExpensePanelOpen);
+  }, [isExpensePanelOpen, onExpensePanelOpenChange]);
 
   function participantName(id: string): string {
     return groupParticipants.find((participant) => participant.id === id)?.name ?? 'Participante';

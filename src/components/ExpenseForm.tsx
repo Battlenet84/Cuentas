@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { Expense, ExpensePayer, ExpenseSplit, Participant } from '../types';
 import { todayInputValue } from '../lib/dates';
 import { formatARS, parseARSInput } from '../lib/money';
@@ -53,8 +53,13 @@ export function ExpenseForm({
   const amountCents = parseARSInput(amount) ?? 0;
   const payerTotalCents = sumAmounts(payerAmounts);
   const splitTotalCents = sumAmounts(splitAmounts);
+  const draftKey = expense?.id ?? 'new-expense';
+  const initializedDraftKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (initializedDraftKeyRef.current === draftKey) return;
+    initializedDraftKeyRef.current = draftKey;
+
     if (!expense) {
       const defaultPayer = defaultPaidByParticipantId ?? activeParticipants[0]?.id ?? '';
       setTitle('');
@@ -85,7 +90,7 @@ export function ExpenseForm({
     setSplitAmounts(toAmountMap(resolvedSplits));
     setDate(expense.date);
     setError(null);
-  }, [activeParticipants, defaultPaidByParticipantId, expense]);
+  }, [draftKey]);
 
   function resetForm() {
     setTitle('');

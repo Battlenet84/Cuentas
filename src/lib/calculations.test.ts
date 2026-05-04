@@ -175,4 +175,23 @@ describe('calculations', () => {
     expect(balanceOf('agus', balances)).toBe(-1000000);
     expect(balanceOf('tomi', balances)).toBe(-1000000);
   });
+
+  it('salda un settlement generado por un gasto viejo', () => {
+    const expenses = [
+      expense({
+        id: 'old',
+        amountCents: 2000000,
+        paidByParticipantId: 'flor',
+        splitParticipantIds: ['flor', 'agus']
+      })
+    ];
+
+    const before = simplifySettlements(calculateBalances(group, participants, expenses));
+    const after = simplifySettlements(calculateBalances(group, participants, expenses, [
+      payment({ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000 })
+    ]));
+
+    expect(before).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000 }]);
+    expect(after).toEqual([]);
+  });
 });

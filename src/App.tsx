@@ -84,6 +84,8 @@ function App() {
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const realtimeRefreshTimeoutRef = useRef<number | null>(null);
   const isRealtimeRefreshingRef = useRef(false);
+  const isExpensePanelOpenRef = useRef(false);
+  const hasPendingRemoteUpdateRef = useRef(false);
 
   const selectedGroupId =
     route.kind === 'localGroup'
@@ -178,6 +180,12 @@ function App() {
       onStatusChange: setSyncStatus,
       onError: () => setDetailError('No se pudo sincronizar.'),
       onChange: () => {
+        if (isExpensePanelOpenRef.current) {
+          hasPendingRemoteUpdateRef.current = true;
+          setSyncStatus('syncing');
+          return;
+        }
+
         if (realtimeRefreshTimeoutRef.current) window.clearTimeout(realtimeRefreshTimeoutRef.current);
 
         realtimeRefreshTimeoutRef.current = window.setTimeout(() => {
@@ -264,12 +272,24 @@ function App() {
     try {
       await operation();
       await refreshRemoteGroup(shareToken);
-    } catch {
+    } catch (error) {
+      console.error(fallbackMessage, error);
       setDetailError(fallbackMessage);
       throw new Error(fallbackMessage);
     } finally {
       setIsSaving(false);
     }
+  }
+
+  function handleExpensePanelOpenChange(isOpen: boolean) {
+    isExpensePanelOpenRef.current = isOpen;
+    if (isOpen || !hasPendingRemoteUpdateRef.current || route.kind !== 'sharedGroup') return;
+
+    hasPendingRemoteUpdateRef.current = false;
+    void refreshRemoteGroup(route.shareToken, { quiet: true }).catch(() => {
+      setDetailError('No se pudo sincronizar.');
+      setSyncStatus('error');
+    });
   }
 
   function openLocalGroup(groupId: string) {
@@ -619,6 +639,7 @@ function App() {
             onCloseOpenExpenses={() => handleCloseOpenExpenses(selectedGroup.id)}
             onRetry={route.kind === 'sharedGroup' ? () => refreshRemoteGroup(route.shareToken) : undefined}
             onManualRefresh={route.kind === 'sharedGroup' ? () => refreshRemoteGroup(route.shareToken, { quiet: true }) : undefined}
+            onExpensePanelOpenChange={handleExpensePanelOpenChange}
             onChangeIdentity={route.kind === 'sharedGroup' ? handleChangeIdentity : undefined}
             onCreateIdentityParticipant={route.kind === 'sharedGroup' ? handleCreateIdentityParticipant : undefined}
             onRevokeMember={route.kind === 'sharedGroup' ? handleRevokeMember : undefined}
