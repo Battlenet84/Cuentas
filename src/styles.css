@@ -187,6 +187,70 @@ textarea:focus-visible {
     color: var(--cc-ink-2);
   }
 
+  .cc-badge {
+    @apply inline-flex min-h-[22px] items-center rounded-full px-2 text-[11px] font-semibold uppercase tracking-wide;
+    background: var(--cc-surface-2);
+    color: var(--cc-ink-2);
+  }
+
+  .cc-badge-info {
+    background: var(--cc-info-soft);
+    color: #234b61;
+  }
+
+  .cc-badge-success {
+    background: var(--cc-positive-soft);
+    color: #3d5226;
+  }
+
+  .cc-badge-warning {
+    background: var(--cc-warning-soft);
+    color: #6e4914;
+  }
+
+  .cc-badge-danger {
+    background: var(--cc-negative-soft);
+    color: #7a2c24;
+  }
+
+  .cc-badge-neutral {
+    background: var(--cc-surface-2);
+    color: var(--cc-ink-2);
+  }
+
+  .cc-section-h {
+    @apply text-xs font-semibold uppercase tracking-[0.06em];
+    color: var(--cc-ink-3);
+  }
+
+  .cc-settings-block {
+    @apply mb-5;
+  }
+
+  .cc-settings-body {
+    @apply overflow-hidden rounded-2xl border;
+    background: var(--cc-surface);
+    border-color: var(--cc-line);
+    box-shadow: var(--cc-shadow-1);
+  }
+
+  .cc-row {
+    @apply flex items-center gap-3 border-t px-3 py-3 first:border-t-0;
+    border-color: var(--cc-line);
+  }
+
+  .cc-icon-tile {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl;
+    background: var(--cc-surface-2);
+    color: var(--cc-ink-2);
+  }
+
+  .cc-chip-active {
+    background: var(--cc-ink);
+    border-color: var(--cc-ink);
+    color: var(--cc-ink-on);
+  }
+
   .cc-banner {
     @apply rounded-2xl border p-4 text-sm font-medium;
   }
@@ -211,7 +275,7 @@ textarea:focus-visible {
   }
 
   .cc-bottom-sheet {
-    @apply max-h-[92vh] w-full overflow-y-auto rounded-t-[28px] p-4 shadow-2xl sm:max-w-xl sm:rounded-2xl;
+    @apply max-h-[92vh] w-full overflow-y-auto rounded-t-[28px] px-5 pb-6 pt-3 shadow-2xl sm:max-w-xl sm:rounded-2xl;
     background: var(--cc-bg);
     box-shadow: 0 -8px 32px rgba(60, 40, 20, 0.12);
   }
@@ -221,6 +285,10 @@ textarea:focus-visible {
   .tabular-nums,
   .num {
     font-variant-numeric: tabular-nums;
+  }
+
+  .serif {
+    font-family: "Fraunces", "Source Serif Pro", Georgia, serif;
   }
 }
 

@@ -21,6 +21,7 @@ import { GroupBottomActionBar } from './GroupBottomActionBar';
 import { GroupTabs, type GroupTab } from './GroupTabs';
 import { GroupMovements } from './GroupMovements';
 import { GroupProfileCard } from './GroupProfileCard';
+import { Badge, Icon, MoneyDisplay, SectionHeader, SettingsBlock, SheetHandle } from './ui';
 
 type GroupDetailProps = {
   group: Group;
@@ -279,25 +280,33 @@ export function GroupDetail({
         <div className="space-y-5">
           <section className="grid gap-3">
             {currencies.length === 0 ? (
-              <div className="cc-card-soft">
-                <p className="text-sm font-semibold text-slate-900">ARS</p>
-                <p className="mt-2 text-sm font-medium text-slate-500">Total gastado</p>
-                <p className="text-2xl font-semibold text-slate-950">{formatCurrencyAmount(0, 'ARS')}</p>
+              <div className="cc-card p-5">
+                <Badge>ARS</Badge>
+                <div className="mt-3">
+                  <MoneyDisplay value={formatCurrencyAmount(0, 'ARS')} label="Total gastado" />
+                </div>
+                <p className="mt-3 text-sm text-slate-500">Todavia no hay gastos abiertos.</p>
               </div>
             ) : null}
             {currencies.map((currency) => (
-              <div key={currency} className="cc-card-soft">
-                <p className="text-sm font-semibold text-slate-900">{currency}</p>
-                <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <p className="text-sm font-medium text-slate-500">Total gastado</p>
-                    <p className="mt-1 text-2xl font-semibold text-slate-950">{formatCurrencyAmount(totalOpenByCurrency[currency] ?? 0, currency)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-500">Pendiente por saldar</p>
-                    <p className="mt-1 text-2xl font-semibold text-slate-950">
-                      {(pendingSettlementByCurrency[currency] ?? 0) > 0 ? formatCurrencyAmount(pendingSettlementByCurrency[currency] ?? 0, currency) : 'Todo saldado'}
-                    </p>
+              <div key={currency} className="cc-card p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <Badge tone="info">{currency}</Badge>
+                  {(pendingSettlementByCurrency[currency] ?? 0) === 0 ? <Badge tone="success">Todo saldado</Badge> : <Badge tone="warning">Pendiente</Badge>}
+                </div>
+                <div className="mt-4">
+                  <MoneyDisplay value={formatCurrencyAmount(totalOpenByCurrency[currency] ?? 0, currency)} label="Total gastado" />
+                </div>
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-100 p-3">
+                  <p className="text-xs font-medium text-slate-500">Pendiente por saldar</p>
+                  <p className="num mt-1 text-2xl font-semibold tracking-[-0.02em] text-slate-950">
+                    {(pendingSettlementByCurrency[currency] ?? 0) > 0 ? formatCurrencyAmount(pendingSettlementByCurrency[currency] ?? 0, currency) : 'Todo saldado'}
+                  </p>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white">
+                    <div
+                      className="h-full rounded-full bg-[var(--cc-primary)]"
+                      style={{ width: `${Math.min(100, Math.round(((pendingSettlementByCurrency[currency] ?? 0) / Math.max(totalOpenByCurrency[currency] ?? 1, 1)) * 100))}%` }}
+                    />
                   </div>
                 </div>
               </div>
@@ -306,12 +315,8 @@ export function GroupDetail({
           {openExpenses.length === 0 ? <EmptyState title="Todavia no hay gastos abiertos." /> : null}
           {settlements.length === 0 && openExpenses.length > 0 ? <EmptyState title="Todavia no hay deudas pendientes." /> : null}
           <SettlementList settlements={settlements} participants={groupParticipants} onSettle={onSettleDebt} />
-          <button
-            type="button"
-            onClick={handleCopySummary}
-            className="cc-button-secondary w-full"
-          >
-            Copiar resumen
+          <button type="button" onClick={handleCopySummary} className="cc-button-secondary w-full">
+            <Icon name="copy" size={15} /> Copiar resumen
           </button>
         </div>
       );
@@ -356,77 +361,81 @@ export function GroupDetail({
           profile={profile ?? null}
           onSave={onUpdateMyGroupProfile}
         />
-        <section className="cc-card grid gap-3">
-          <h2 className="cc-section-title">Acceso al grupo</h2>
+        <SettingsBlock title="Acceso al grupo" sub="Compartir link y aprobar ingresos.">
           <button
             type="button"
             onClick={handleCopyGroupLink}
-            className="cc-button-secondary"
+            className="cc-row w-full justify-between text-left"
           >
-            Copiar link de invitacion
+            <span>Copiar link de invitacion</span>
+            <Icon name="link" size={15} />
           </button>
           {isOwner && onRegenerateInvite ? (
             <button
               type="button"
               onClick={handleRegenerateInvite}
-              className="cc-button-secondary"
+              className="cc-row w-full justify-between text-left"
             >
-              Regenerar link de invitacion
+              <span>Regenerar link de invitacion</span>
+              <Icon name="settings" size={15} />
             </button>
           ) : null}
-          <p className="cc-muted">Las personas con link deberan solicitar acceso.</p>
-          {isOwner ? <p className="cc-muted">Las solicitudes se aprueban desde Personas.</p> : null}
-        </section>
+          <div className="px-3 py-3 text-sm text-slate-600">
+            Las personas con link deberan solicitar acceso. {isOwner ? 'Las solicitudes se aprueban desde Personas.' : ''}
+          </div>
+        </SettingsBlock>
 
-        <section className="cc-card grid gap-3">
-          <h2 className="cc-section-title">Gestion del periodo</h2>
+        <SettingsBlock title="Gestion del periodo" sub="Cierre del periodo actual.">
+          <div className="p-3">
           <button
             type="button"
             onClick={handleClose}
             disabled={openExpenses.length === 0 || pendingSettlementCents > 0}
-            className="cc-button-primary disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="cc-button-primary w-full disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             Cerrar periodo
           </button>
           {pendingSettlementCents > 0 ? (
-            <p className="cc-muted">Para cerrar el periodo, primero salda todas las deudas pendientes.</p>
+            <p className="cc-muted mt-3">Para cerrar el periodo, primero salda todas las deudas pendientes.</p>
           ) : null}
-        </section>
+          </div>
+        </SettingsBlock>
 
-        <section className="cc-card grid gap-3">
-          <h2 className="cc-section-title">Datos y mantenimiento</h2>
+        <SettingsBlock title="Datos y mantenimiento" sub="Sincronizacion y navegacion.">
           {onManualRefresh ? (
             <button
               type="button"
               onClick={onManualRefresh}
-              className="cc-button-secondary"
+              className="cc-row w-full justify-between text-left"
             >
-              Actualizar datos
+              <span>Actualizar datos</span>
+              <Icon name="settings" size={15} />
             </button>
           ) : null}
           <button
             type="button"
             onClick={onBack}
-            className="cc-button-secondary"
+            className="cc-row w-full justify-between text-left"
           >
-            Volver a Mis grupos
+            <span>Volver a Mis grupos</span>
+            <Icon name="arrow-r" size={15} />
           </button>
-        </section>
+        </SettingsBlock>
 
-        <section className="cc-card grid gap-3">
-          <h2 className="cc-section-title">Cuenta</h2>
+        <SettingsBlock title="Cuenta">
           {onSignOut ? (
             <button
               type="button"
               onClick={onSignOut}
-              className="cc-button-secondary"
+              className="cc-row w-full justify-between text-left"
             >
-              Cerrar sesion
+              <span>Cerrar sesion</span>
+              <Icon name="user" size={15} />
             </button>
           ) : (
-            <p className="cc-muted">No hay acciones de cuenta en modo local.</p>
+            <p className="p-3 text-sm text-slate-600">No hay acciones de cuenta en modo local.</p>
           )}
-        </section>
+        </SettingsBlock>
       </div>
     );
   }
@@ -434,19 +443,19 @@ export function GroupDetail({
   return (
     <div className="min-h-screen pb-28 md:pb-0">
       <div className="space-y-5">
-        <header className="rounded-[28px] border border-slate-200 bg-white/95 p-4 shadow-lg shadow-[rgba(60,40,20,0.08)] md:p-5">
-          <div className="flex items-start justify-between gap-3">
+        <header className="px-1 pt-1">
+          <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Grupo</p>
-              <h1 className="mt-1 text-xl font-semibold text-slate-950 md:text-2xl">{group.name}</h1>
+              <h1 className="serif mt-1 text-[1.7rem] font-semibold leading-tight tracking-[-0.025em] text-slate-950 md:text-3xl">{group.name}</h1>
               {syncStatus === 'error' ? <p className="mt-2 text-xs text-slate-500">No se pudo sincronizar.</p> : null}
             </div>
             <button type="button" onClick={handleCopyGroupLink} className="cc-button-secondary min-h-10 px-3 text-xs">
-              Copiar link
+              <Icon name="link" size={14} /> Invitar
             </button>
           </div>
           <p className="mt-3 text-sm text-slate-600">
-            Pendiente por saldar: {settlements.length === 0 ? 'Todo saldado' : currencies.map((currency) => formatCurrencyAmount(pendingSettlementByCurrency[currency] ?? 0, currency)).join(' · ')}
+            {groupParticipants.length} personas · {settlements.length === 0 ? 'todo saldado' : `pendiente ${currencies.map((currency) => formatCurrencyAmount(pendingSettlementByCurrency[currency] ?? 0, currency)).join(' · ')}`}
           </p>
         </header>
 
@@ -484,6 +493,7 @@ export function GroupDetail({
       {isExpensePanelOpen ? (
         <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-4">
           <div className="cc-bottom-sheet">
+            <SheetHandle />
             {expenseForm}
           </div>
         </div>

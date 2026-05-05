@@ -6,6 +6,7 @@ import { JoinGroupCard } from './components/JoinGroupCard';
 import { AuthScreen } from './components/AuthScreen';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { ProfileCard } from './components/ProfileCard';
+import { Logo } from './components/ui';
 import {
   assignSettlementCycleToExpenses,
   createExpense,
@@ -764,27 +765,35 @@ function App() {
 
   return (
     <div className="cc-app min-h-screen">
-      <main className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6">
-        <header className="pt-2">
-          <p className="text-sm font-medium uppercase tracking-wide text-teal-700">Cuentas Claras</p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-950">Tus grupos</h1>
-          <p className="mt-2 text-slate-600">Carga gastos, mira saldos y cerra cuentas sin vueltas.</p>
+      <main className="mx-auto flex max-w-3xl flex-col gap-5 px-5 py-5 sm:px-6">
+        <header className="flex items-center justify-between gap-3 pt-1">
+          <Logo compact />
+          {isSupabaseConfigured ? (
+            <button
+              type="button"
+              onClick={() => void handleSignOut()}
+              className="cc-button-ghost px-2 text-xs"
+            >
+              Cerrar sesion
+            </button>
+          ) : null}
         </header>
+
+        <section className="pt-3">
+          <h1 className="serif text-3xl font-semibold tracking-[-0.025em] text-slate-950">
+            Hola{profile?.displayName ? `, ${profile.displayName}` : ''}
+          </h1>
+          <p className="mt-2 text-[15px] leading-6 text-slate-700">
+            {state.groups.length > 0
+              ? `Tenes ${state.groups.length} ${state.groups.length === 1 ? 'grupo activo' : 'grupos activos'} para cargar gastos y saldar cuentas.`
+              : 'Crea tu primer grupo para dividir gastos sin perder el hilo.'}
+          </p>
+        </section>
 
         {!isSupabaseConfigured ? (
           <p className="cc-banner cc-banner-warning">
             Modo local activo. Para compartir grupos entre celulares configura Supabase.
           </p>
-        ) : null}
-
-        {isSupabaseConfigured ? (
-          <button
-            type="button"
-            onClick={() => void handleSignOut()}
-            className="cc-button-ghost self-start"
-          >
-            Cerrar sesion
-          </button>
         ) : null}
 
         {routeMessage ? (
@@ -807,7 +816,7 @@ function App() {
           defaultOwnerAlias={profile?.paymentAlias ?? ''}
         />
         {isSaving ? <p className="text-sm font-medium text-slate-600">Guardando cambios...</p> : null}
-        {isSupabaseConfigured ? <h2 className="cc-section-title">Mis grupos</h2> : null}
+        {isSupabaseConfigured ? <h2 className="cc-section-h px-1">Mis grupos</h2> : null}
         <GroupList groups={state.groups} participants={state.participants} onOpenGroup={openLocalGroup} />
       </main>
     </div>

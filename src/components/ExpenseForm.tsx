@@ -3,6 +3,7 @@ import type { CurrencyCode, Expense, ExpensePayer, ExpenseSplit, Participant } f
 import { todayInputValue } from '../lib/dates';
 import { formatARS, formatCurrencyAmount, normalizeCurrency, parseARSInput, supportedCurrencies } from '../lib/money';
 import { buildPercentageSplits, parsePercentageInput, percentageSum } from '../lib/percentageSplits';
+import { Avatar, Badge, Icon } from './ui';
 
 type ExpenseFormProps = {
   groupId: string;
@@ -259,17 +260,20 @@ export function ExpenseForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-950">{expense ? 'Editar gasto' : 'Agregar gasto'}</h2>
-        <p className="cc-muted mt-1">Completa los datos y revisa que las sumas cierren.</p>
+    <form onSubmit={handleSubmit} className="grid gap-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="serif text-2xl font-semibold tracking-[-0.02em] text-slate-950">{expense ? 'Editar gasto' : 'Nuevo gasto'}</h2>
+          <p className="cc-muted mt-1">Carga el total, quien pago y como se reparte.</p>
+        </div>
+        <Badge tone={currency === 'ARS' ? 'info' : 'neutral'}>{currency}</Badge>
       </div>
       {error ? <p className="cc-banner cc-banner-error">{error}</p> : null}
 
-      <section className="cc-card-soft grid gap-3">
-        <h3 className="cc-section-title">Datos del gasto</h3>
+      <section className="grid gap-3">
+        <h3 className="cc-section-h">Datos del gasto</h3>
         <label className="grid gap-1 text-sm font-medium text-slate-700">
-          Nombre del gasto
+          Que fue
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
@@ -278,27 +282,28 @@ export function ExpenseForm({
           />
         </label>
 
-        <label className="grid gap-1 text-sm font-medium text-slate-700">
-          Moneda
-          <select value={currency} onChange={(event) => setCurrency(normalizeCurrency(event.target.value))} className="cc-input">
-            {supportedCurrencies.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="grid gap-1 text-sm font-medium text-slate-700">
-          Total
-          <input
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-            className="cc-input"
-            inputMode="decimal"
-            placeholder="12.500,00"
-          />
-        </label>
+        <div className="grid grid-cols-[1fr_104px] gap-2">
+          <label className="grid gap-1 text-sm font-medium text-slate-700">
+            Total
+            <input
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              className="cc-input num min-h-16 text-2xl font-semibold tracking-[-0.02em]"
+              inputMode="decimal"
+              placeholder="12.500,00"
+            />
+          </label>
+          <label className="grid gap-1 text-sm font-medium text-slate-700">
+            Moneda
+            <select value={currency} onChange={(event) => setCurrency(normalizeCurrency(event.target.value))} className="cc-input min-h-16">
+              {supportedCurrencies.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         <label className="grid gap-1 text-sm font-medium text-slate-700">
           Fecha
@@ -311,9 +316,9 @@ export function ExpenseForm({
         </label>
       </section>
 
-      <section className="cc-card-soft grid gap-3">
+      <section className="grid gap-3">
         <div>
-          <p className="cc-section-title">Quien pago</p>
+          <p className="cc-section-h">Quien pago</p>
           <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-slate-100 p-1">
             {(['single', 'multiple'] as const).map((mode) => (
               <button
@@ -356,9 +361,9 @@ export function ExpenseForm({
         )}
       </section>
 
-      <section className="cc-card-soft grid gap-3">
+      <section className="grid gap-3">
         <div>
-          <p className="cc-section-title">Como se divide</p>
+          <p className="cc-section-h">Como se divide</p>
           <div className="mt-2 grid gap-2 rounded-2xl border border-slate-200 bg-slate-100 p-1 sm:grid-cols-3">
             {(['equal', 'manual', 'percentage'] as const).map((mode) => (
               <button
@@ -381,14 +386,15 @@ export function ExpenseForm({
               </button>
             </div>
             {availableParticipants.map((participant) => (
-              <label key={participant.id} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+              <label key={participant.id} className="cc-row rounded-xl border border-slate-200 bg-white text-sm first:border-t">
+                <Avatar name={participant.name} size={28} />
                 <input
                   type="checkbox"
                   checked={equalSplitIds.includes(participant.id)}
                   onChange={() => toggleEqualSplit(participant.id)}
                   className="h-4 w-4 rounded border-slate-300"
                 />
-                {participant.name}
+                <span className="font-medium text-slate-800">{participant.name}</span>
                 {!participant.isActive ? <span className="text-slate-400">(inactivo)</span> : null}
               </label>
             ))}
@@ -442,8 +448,14 @@ export function ExpenseForm({
         )}
       </section>
 
-      <section className="cc-card-soft grid gap-3">
-        <h3 className="cc-section-title">Guardar</h3>
+      <section className="cc-card grid gap-3 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="cc-section-h">Resumen</h3>
+            <p className="mt-1 text-sm text-slate-600">{amountCents > 0 ? formatCurrencyAmount(amountCents, currency) : 'Completa el total'} · {splitMode === 'equal' ? 'partes iguales' : splitMode === 'manual' ? 'montos manuales' : 'porcentaje'}</p>
+          </div>
+          <span className="cc-icon-tile"><Icon name="check" size={16} /></span>
+        </div>
         <div className="grid gap-2 sm:grid-cols-2">
         <button
           type="submit"
@@ -475,10 +487,16 @@ function ProgressLine({ currentCents, totalCents, currency, label }: { currentCe
   if (totalCents > 0 && difference === 0) detail = 'La suma coincide.';
 
   return (
-    <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-      {label}: {formatCurrencyAmount(currentCents, currency)} de {formatCurrencyAmount(totalCents, currency)}
-      {detail ? <span className="ml-1 font-medium text-slate-700">{detail}</span> : null}
-    </p>
+    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+      <div className="flex justify-between gap-3">
+        <span>{label}</span>
+        <span className="num font-semibold text-slate-800">{formatCurrencyAmount(currentCents, currency)} / {formatCurrencyAmount(totalCents, currency)}</span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-[var(--cc-primary)]" style={{ width: `${totalCents > 0 ? Math.min(100, Math.round((currentCents / totalCents) * 100)) : 0}%` }} />
+      </div>
+      {detail ? <p className="mt-1 font-medium text-slate-700">{detail}</p> : null}
+    </div>
   );
 }
 
@@ -490,10 +508,16 @@ function PercentageProgress({ current }: { current: number }) {
   if (Math.abs(difference) < 0.001) detail = 'La suma coincide.';
 
   return (
-    <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-      Asignado: {formatPercentage(current)} de 100%
-      <span className="ml-1 font-medium text-slate-700">{detail}</span>
-    </p>
+    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+      <div className="flex justify-between gap-3">
+        <span>Asignado</span>
+        <span className="num font-semibold text-slate-800">{formatPercentage(current)} / 100%</span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-[var(--cc-primary)]" style={{ width: `${Math.min(100, Math.max(0, current))}%` }} />
+      </div>
+      <p className="mt-1 font-medium text-slate-700">{detail}</p>
+    </div>
   );
 }
 
@@ -507,12 +531,13 @@ function MoneyRow({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="grid gap-1 text-sm font-medium text-slate-700">
-      {participant.name}
+    <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+      <Avatar name={participant.name} size={28} />
+      <span className="min-w-0 flex-1 truncate">{participant.name}</span>
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="cc-input"
+        className="cc-input num h-10 min-h-10 w-32 text-right"
         inputMode="decimal"
         placeholder="0,00"
       />
@@ -534,13 +559,14 @@ function PercentageRow({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="grid gap-1 text-sm font-medium text-slate-700">
-      {participant.name}
+    <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+      <Avatar name={participant.name} size={28} />
+      <span className="min-w-0 flex-1 truncate">{participant.name}</span>
       <div className="flex items-center gap-2">
         <input
           value={value}
           onChange={(event) => onChange(event.target.value)}
-        className="cc-input flex-1"
+          className="cc-input num h-10 min-h-10 w-20 text-right"
           inputMode="decimal"
           placeholder="0"
         />

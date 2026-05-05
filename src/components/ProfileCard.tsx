@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import type { Profile } from '../types';
+import { Avatar, Icon } from './ui';
 
 type ProfileCardProps = {
   profile: Profile | null;
@@ -35,19 +36,22 @@ export function ProfileCard({ profile, onSave }: ProfileCardProps) {
 
   return (
     <section className="cc-card">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="cc-section-title">Mi perfil</h2>
-          <p className="mt-2 text-sm text-slate-600">Nombre predeterminado: {profile?.displayName || 'Sin nombre predeterminado'}</p>
-          <p className="mt-1 text-sm text-slate-600">Alias predeterminado: {profile?.paymentAlias || 'Sin alias predeterminado'}</p>
+      <div className="flex items-center gap-3">
+        <Avatar name={profile?.displayName || 'Yo'} size={48} />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[15px] font-semibold text-slate-950">{profile?.displayName || 'Mi perfil'}</h2>
+          <p className="mt-1 flex items-center gap-1 text-sm text-slate-500">
+            <Icon name="wallet" size={14} />
+            {profile?.paymentAlias || 'Sin alias predeterminado'}
+          </p>
         </div>
-        <button type="button" onClick={() => setIsEditing((value) => !value)} className="cc-button-ghost">
-          Editar perfil
+        <button type="button" onClick={() => setIsEditing((value) => !value)} className="cc-button-secondary min-h-9 px-3 text-xs">
+          Editar
         </button>
       </div>
       {isEditing ? (
         <form onSubmit={handleSubmit} className="mt-4 grid gap-3">
-          {error ? <p className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+          {error ? <p className="cc-banner cc-banner-error">{error}</p> : null}
           <label className="grid gap-1 text-sm font-medium text-slate-700">
             Nombre predeterminado
             <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} className="cc-input" />

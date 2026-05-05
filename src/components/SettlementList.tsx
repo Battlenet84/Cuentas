@@ -3,6 +3,7 @@ import { formatCurrencyAmount } from '../lib/money';
 import { copyToClipboard } from '../lib/clipboard';
 import { openMercadoPago } from '../lib/mercadoPago';
 import { useState } from 'react';
+import { Avatar, Icon, SectionHeader } from './ui';
 
 type SettlementListProps = {
   settlements: Settlement[];
@@ -68,69 +69,82 @@ export function SettlementList({ settlements, participants, onSettle }: Settleme
 
   return (
     <section className="space-y-3">
-      <h2 className="cc-section-title">Para saldar</h2>
-      {error ? <p className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-      {copyStatus ? <p className="rounded-xl border border-teal-100 bg-teal-50 p-3 text-sm text-teal-800">{copyStatus}</p> : null}
+      <SectionHeader title="Para saldar" sub="Cada deuda muestra quien paga, quien recibe y las acciones utiles." />
+      {error ? <p className="cc-banner cc-banner-error">{error}</p> : null}
+      {copyStatus ? <p className="cc-banner cc-banner-success">{copyStatus}</p> : null}
       {settlements.length === 0 ? (
-        <p className="rounded-xl border border-teal-100 bg-teal-50 p-4 text-sm font-semibold text-teal-800">
-          Todo esta saldado.
-        </p>
+        <div className="cc-card flex items-center gap-3 border-[var(--cc-positive-soft)] bg-[var(--cc-positive-soft)]">
+          <span className="cc-icon-tile bg-white/60 text-[var(--cc-positive)]"><Icon name="check" size={18} /></span>
+          <div>
+            <p className="font-semibold text-slate-950">Todo saldado</p>
+            <p className="text-sm text-slate-700">No hay deudas pendientes en este periodo.</p>
+          </div>
+        </div>
       ) : (
-        <div className="grid gap-2">
+        <div className="grid gap-3">
           {settlements.map((settlement, index) => {
             const receiver = participant(settlement.toParticipantId);
+            const fromName = participantName(settlement.fromParticipantId);
+            const toName = participantName(settlement.toParticipantId);
             return (
               <div
                 key={`${settlement.fromParticipantId}-${settlement.toParticipantId}-${index}`}
-                className="cc-card-soft"
+                className="cc-card p-4"
               >
-                <div className="grid gap-3 sm:flex sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-sm leading-6 text-slate-700">
-                      <span className="font-semibold">{participantName(settlement.fromParticipantId)}</span> le paga{' '}
-                      <span className="font-semibold">{formatCurrencyAmount(settlement.amountCents, settlement.currency)}</span> a{' '}
-                      <span className="font-semibold">{participantName(settlement.toParticipantId)}</span>
-                    </p>
-                    {receiver?.alias ? (
-                      <p className="mt-1 text-xs font-medium text-slate-500">Alias de {receiver.name}: {receiver.alias}</p>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap gap-2 sm:justify-end">
-                    {receiver?.alias ? (
-                      <button
-                        type="button"
-                        onClick={() => void copyText(receiver.alias ?? '', 'Alias copiado')}
-                        className="cc-button-ghost"
-                      >
-                        Copiar alias
-                      </button>
-                    ) : null}
+                <div className="flex items-center gap-3">
+                  <Avatar name={fromName} size={34} />
+                  <Icon name="arrow-r" size={14} className="text-slate-400" />
+                  <Avatar name={toName} size={34} />
+                  <div className="min-w-0 flex-1" />
+                  <p className="num text-lg font-semibold tracking-[-0.01em] text-slate-950">
+                    {formatCurrencyAmount(settlement.amountCents, settlement.currency)}
+                  </p>
+                </div>
+                <div className="mt-3">
+                  <p className="text-sm leading-6 text-slate-700">
+                    <span className="font-semibold">{fromName}</span> le paga a <span className="font-semibold">{toName}</span>
+                  </p>
+                  {receiver?.alias ? (
+                    <p className="mt-0.5 text-xs font-medium text-slate-500">Alias: {receiver.alias}</p>
+                  ) : (
+                    <p className="mt-0.5 text-xs font-medium text-slate-500">Sin alias cargado</p>
+                  )}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {receiver?.alias ? (
                     <button
                       type="button"
-                      onClick={() => void copyText(copyableAmount(settlement.amountCents), 'Monto copiado')}
-                      className="cc-button-ghost"
+                      onClick={() => void copyText(receiver.alias ?? '', 'Alias copiado')}
+                      className="cc-button-secondary min-h-9 px-3 text-xs"
                     >
-                      Copiar monto
+                      <Icon name="copy" size={13} /> Alias
                     </button>
-                    {receiver?.alias ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleOpenMercadoPago(receiver.alias ?? '')}
-                        className="cc-button-secondary"
-                      >
-                        Abrir Mercado Pago
-                      </button>
-                    ) : null}
-                    {onSettle ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleSettle(settlement)}
-                        className="cc-button-secondary border-teal-200 text-teal-800"
-                      >
-                        Saldar
-                      </button>
-                    ) : null}
-                  </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void copyText(copyableAmount(settlement.amountCents), 'Monto copiado')}
+                    className="cc-button-secondary min-h-9 px-3 text-xs"
+                  >
+                    <Icon name="copy" size={13} /> Monto
+                  </button>
+                  {receiver?.alias ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleOpenMercadoPago(receiver.alias ?? '')}
+                      className="cc-button-secondary min-h-9 px-3 text-xs"
+                    >
+                      <Icon name="wallet" size={13} /> Mercado Pago
+                    </button>
+                  ) : null}
+                  {onSettle ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleSettle(settlement)}
+                      className="cc-button-primary ml-auto min-h-9 px-3 text-xs"
+                    >
+                      Saldar
+                    </button>
+                  ) : null}
                 </div>
               </div>
             );

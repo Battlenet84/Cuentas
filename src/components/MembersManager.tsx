@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { GroupMembership } from '../types';
 import type { GroupMemberView } from '../data/supabaseStorage';
 import { formatDateTime } from '../lib/dates';
+import { Avatar, Badge, SettingsBlock } from './ui';
 
 type MembersManagerProps = {
   members: GroupMemberView[];
@@ -76,28 +77,29 @@ export function MembersManager({
 
   return (
     <section className="space-y-5">
-      {error ? <p className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-      {message ? <p className="rounded-xl border border-teal-100 bg-teal-50 p-3 text-sm text-teal-800">{message}</p> : null}
+      {error ? <p className="cc-banner cc-banner-error">{error}</p> : null}
+      {message ? <p className="cc-banner cc-banner-success">{message}</p> : null}
 
-      <div className="space-y-2">
-        <h2 className="cc-section-title">Miembros con acceso</h2>
-        <div className="grid gap-2">
+      <SettingsBlock title="Miembros con acceso" sub={`${activeMembers.length} activos`}>
           {activeMembers.length === 0 ? (
-            <p className="cc-card text-sm text-slate-500">Todavia no hay miembros activos.</p>
+            <p className="p-3 text-sm text-slate-500">Todavia no hay miembros activos.</p>
           ) : (
             activeMembers.map((member) => (
-              <div key={member.id} className="cc-card-soft">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+              <div key={member.id} className="cc-row flex-wrap">
+                <Avatar name={memberName(member)} size={36} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
                     <p className="font-medium text-slate-900">{memberName(member)}</p>
-                    <p className="text-sm text-slate-500">
-                      {member.participantAlias ? `Alias: ${member.participantAlias} · ` : ''}
-                      {member.role} · ultimo acceso {formatDateTime(member.lastSeenAt)}
-                    </p>
+                    <Badge tone={member.role === 'owner' ? 'warning' : 'neutral'}>{member.role}</Badge>
+                    {member.id === currentMembership?.id ? <Badge tone="info">Vos</Badge> : null}
                   </div>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {member.participantAlias ? `Alias: ${member.participantAlias} · ` : ''}
+                    Ultimo acceso {formatDateTime(member.lastSeenAt)}
+                  </p>
                 </div>
                 {isOwner && member.id !== currentMembership?.id ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="flex w-full flex-wrap gap-2 pl-12">
                     {member.role === 'member' && onPromoteMember ? (
                       <button
                         type="button"
@@ -128,21 +130,21 @@ export function MembersManager({
               </div>
             ))
           )}
-        </div>
-      </div>
+      </SettingsBlock>
 
       {isOwner ? (
-        <div className="space-y-2">
-          <h2 className="cc-section-title">Solicitudes pendientes</h2>
-          <div className="grid gap-2">
+        <SettingsBlock title="Solicitudes pendientes" sub="Personas que pidieron entrar">
             {pendingMembers.length === 0 ? (
-              <p className="cc-card text-sm text-slate-500">No hay solicitudes pendientes.</p>
+              <p className="p-3 text-sm text-slate-500">No hay solicitudes pendientes.</p>
             ) : (
               pendingMembers.map((member) => (
-                <div key={member.id} className="rounded-xl border border-amber-200 bg-white p-3 shadow-sm">
-                  <p className="font-medium text-slate-900">{memberName(member)}</p>
-                  <p className="text-sm text-slate-500">{member.participantAlias ? `Alias: ${member.participantAlias}` : 'Sin alias cargado'}</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                <div key={member.id} className="cc-row flex-wrap bg-[var(--cc-warning-soft)]">
+                  <Avatar name={memberName(member)} size={36} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-slate-900">{memberName(member)}</p>
+                    <p className="text-sm text-slate-500">{member.participantAlias ? `Alias: ${member.participantAlias}` : 'Sin alias cargado'}</p>
+                  </div>
+                  <div className="flex w-full flex-wrap gap-2 pl-12">
                     <button
                       type="button"
                       onClick={() => void run(() => onApproveMember?.(member.id) ?? Promise.resolve(), 'Solicitud aprobada.', 'No se pudo aprobar.')}
@@ -161,30 +163,29 @@ export function MembersManager({
                 </div>
               ))
             )}
-          </div>
-        </div>
+        </SettingsBlock>
       ) : null}
 
       {isOwner ? (
-        <div className="space-y-2">
-          <h2 className="cc-section-title">Accesos revocados</h2>
-          <div className="grid gap-2">
+        <SettingsBlock title="Accesos revocados">
             {revokedMembers.length === 0 ? (
-              <p className="cc-card text-sm text-slate-500">No hay accesos revocados.</p>
+              <p className="p-3 text-sm text-slate-500">No hay accesos revocados.</p>
             ) : (
               revokedMembers.map((member) => (
-                <div key={member.id} className="cc-card-soft">
-                  <p className="font-medium text-slate-900">{memberName(member)}</p>
-                  <p className="text-sm text-slate-500">Revocado · {formatDateTime(member.lastSeenAt)}</p>
+                <div key={member.id} className="cc-row">
+                  <Avatar name={memberName(member)} size={36} />
+                  <div>
+                    <p className="font-medium text-slate-900">{memberName(member)}</p>
+                    <p className="text-sm text-slate-500">Revocado · {formatDateTime(member.lastSeenAt)}</p>
+                  </div>
                 </div>
               ))
             )}
-          </div>
-        </div>
+        </SettingsBlock>
       ) : null}
 
       {isOwner && duplicateMembers.length > 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 shadow-sm">
+        <div className="cc-banner cc-banner-warning">
           <h2 className="font-semibold">Posibles duplicados</h2>
           <p className="mt-1">Hay mas de una membresia activa asociada al mismo participante.</p>
         </div>

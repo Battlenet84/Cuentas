@@ -3,6 +3,7 @@ import type { ActivityLog, CurrencyCode, Expense, ExpenseSplit, Participant, Set
 import { formatDate, formatMovementDateGroup, movementDateKey } from '../lib/dates';
 import { formatCurrencyAmount, normalizeCurrency, supportedCurrencies } from '../lib/money';
 import { EmptyState } from './EmptyState';
+import { Badge, Icon, SheetHandle } from './ui';
 
 type MovementFilter = 'all' | 'expenses' | 'payments' | 'cycles' | 'activity';
 type DateFilter = 'all' | 'today' | 'last7' | 'month';
@@ -180,12 +181,17 @@ export function GroupMovements({
 
   return (
     <section className="space-y-4">
-      <input
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        className="cc-input w-full"
-        placeholder="Buscar movimiento"
-      />
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+          <Icon name="search" size={16} />
+        </span>
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          className="cc-input w-full pl-10"
+          placeholder="Buscar movimiento"
+        />
+      </div>
       <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
         <div className="flex min-w-max gap-2">
           {filters.map((item) => (
@@ -193,10 +199,10 @@ export function GroupMovements({
               key={item.id}
               type="button"
               onClick={() => setFilter(item.id)}
-              className={`min-h-10 rounded-full border px-4 text-sm font-semibold shadow-sm transition ${
+              className={`cc-pill min-h-9 shadow-sm transition ${
                 filter === item.id
-                  ? 'border-teal-700 bg-teal-700 text-white'
-                  : 'border-slate-200 bg-white text-slate-700'
+                  ? 'cc-chip-active'
+                  : ''
               }`}
             >
               {item.label}
@@ -230,7 +236,7 @@ export function GroupMovements({
         </select>
       </div>
 
-      {error ? <p className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="cc-banner cc-banner-error">{error}</p> : null}
 
       {movementGroups.length === 0 ? (
         <div className="space-y-3">
@@ -245,8 +251,8 @@ export function GroupMovements({
         <div className="space-y-5">
           {movementGroups.map((group) => (
             <div key={group.date} className="space-y-2">
-              <h2 className="text-sm font-semibold text-slate-500">{formatMovementDateGroup(group.date)}</h2>
-              <div className="grid gap-2">
+              <h2 className="cc-section-h px-1">{formatMovementDateGroup(group.date)}</h2>
+              <div className="grid gap-2 border-l border-slate-200 pl-3">
                 {group.items.map((item) => {
                   if (item.type === 'expense') {
                     return (
@@ -343,26 +349,27 @@ function ExpenseMovementCard({
   onDeleteExpense: (expense: Expense) => void;
 }) {
   return (
-    <article className="cc-card-soft">
-      <div className="flex items-start justify-between gap-3">
-        <div>
+    <article className="cc-card relative p-3 before:absolute before:-left-[17px] before:top-6 before:h-2 before:w-2 before:rounded-full before:bg-[var(--cc-primary)]">
+      <div className="flex items-center gap-3">
+        <span className="cc-icon-tile"><Icon name="receipt" size={16} /></span>
+        <div className="min-w-0 flex-1">
           <p className="text-xs text-slate-500">{formatDate(expense.date)}</p>
-          <h3 className="mt-1 font-semibold text-slate-900">{expense.title}</h3>
+          <h3 className="mt-1 truncate font-semibold text-slate-900">{expense.title}</h3>
         </div>
-        <span className="font-semibold text-slate-900">{formatCurrencyAmount(expense.amountCents, expense.currency)}</span>
+        <span className="num font-semibold text-slate-900">{formatCurrencyAmount(expense.amountCents, expense.currency)}</span>
       </div>
-      <div className="mt-2 space-y-1 text-sm text-slate-600">
+      <div className="mt-3 space-y-1 pl-12 text-sm text-slate-600">
         <p>{payerText}</p>
         <p>{splitModeLabel(expense.splitMode)}</p>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" onClick={() => onViewDetail(expense)} className="cc-button-ghost">
+      <div className="mt-3 flex flex-wrap gap-2 pl-12">
+        <button type="button" onClick={() => onViewDetail(expense)} className="cc-button-secondary min-h-9 px-3 text-xs">
           Ver detalle
         </button>
-        <button type="button" onClick={() => onEditExpense(expense)} className="cc-button-ghost">
+        <button type="button" onClick={() => onEditExpense(expense)} className="cc-button-ghost min-h-9 px-3 text-xs">
           Editar
         </button>
-        <button type="button" onClick={() => void onDeleteExpense(expense)} className="cc-button-danger">
+        <button type="button" onClick={() => void onDeleteExpense(expense)} className="cc-button-danger min-h-9 px-3 text-xs">
           Eliminar
         </button>
       </div>
@@ -386,21 +393,22 @@ function PaymentMovementCard({
   const isVoided = Boolean(payment.voidedAt);
 
   return (
-    <article className={`cc-card-soft ${isVoided ? 'opacity-70' : ''}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
+    <article className={`cc-card relative p-3 before:absolute before:-left-[17px] before:top-6 before:h-2 before:w-2 before:rounded-full before:bg-[var(--cc-positive)] ${isVoided ? 'opacity-70' : ''}`}>
+      <div className="flex items-center gap-3">
+        <span className="cc-icon-tile bg-[var(--cc-positive-soft)] text-[var(--cc-positive)]"><Icon name="arrow-r" size={16} /></span>
+        <div className="min-w-0 flex-1">
           <p className="text-xs text-slate-500">{new Date(payment.createdAt).toLocaleDateString('es-AR')}</p>
           <h3 className="mt-1 font-semibold text-slate-900">
             {fromName} le pago a {toName}
           </h3>
         </div>
-        <span className="font-semibold text-slate-900">{formatCurrencyAmount(payment.amountCents, payment.currency)}</span>
+        <span className="num font-semibold text-slate-900">{formatCurrencyAmount(payment.amountCents, payment.currency)}</span>
       </div>
-      {toAlias ? <p className="mt-2 text-sm text-slate-600">Alias de {toName}: {toAlias}</p> : null}
+      {toAlias ? <p className="mt-2 pl-12 text-sm text-slate-600">Alias de {toName}: {toAlias}</p> : null}
       {isVoided ? (
-        <p className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">Pago anulado</p>
+        <p className="mt-2 pl-12"><Badge tone="danger">Pago anulado</Badge></p>
       ) : onVoid ? (
-        <button type="button" onClick={() => onVoid(payment.id)} className="cc-button-danger mt-3">
+        <button type="button" onClick={() => onVoid(payment.id)} className="cc-button-danger ml-12 mt-3 min-h-9 px-3 text-xs">
           Anular
         </button>
       ) : null}
@@ -419,7 +427,7 @@ function ActivityMovementCard({
   const text = activityText(activity, actor, participantName);
 
   return (
-    <article className="cc-card-soft">
+    <article className="relative rounded-2xl border border-transparent p-3 before:absolute before:-left-[17px] before:top-6 before:h-2 before:w-2 before:rounded-full before:bg-[var(--cc-line-strong)]">
       <p className="text-xs text-slate-500">{new Date(activity.createdAt).toLocaleDateString('es-AR')}</p>
       <h3 className="mt-1 text-sm font-semibold text-slate-900">{text}</h3>
     </article>
@@ -525,14 +533,19 @@ function CycleMovementCard({
   onViewDetail: (cycle: SettlementCycle) => void;
 }) {
   return (
-    <article className="cc-card-soft">
-      <h3 className="font-semibold text-slate-900">{cycle.title}</h3>
-      <p className="mt-1 text-sm text-slate-500">
+    <article className="cc-card relative p-3 before:absolute before:-left-[17px] before:top-6 before:h-2 before:w-2 before:rounded-full before:bg-[var(--cc-info)]">
+      <div className="flex items-center gap-3">
+        <span className="cc-icon-tile bg-[var(--cc-info-soft)] text-[var(--cc-info)]"><Icon name="lock" size={16} /></span>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold text-slate-900">{cycle.title}</h3>
+          <p className="mt-1 text-sm text-slate-500">
         {new Date(cycle.closedAt).toLocaleDateString('es-AR')}
         {closedExpenseCount > 0 ? ` - ${closedExpenseCount} gastos` : ''}
         {closedPaymentCount > 0 ? ` - ${closedPaymentCount} pagos` : ''}
-      </p>
-      <button type="button" onClick={() => onViewDetail(cycle)} className="cc-button-secondary mt-3">
+          </p>
+        </div>
+      </div>
+      <button type="button" onClick={() => onViewDetail(cycle)} className="cc-button-secondary ml-12 mt-3 min-h-9 px-3 text-xs">
         Ver detalle
       </button>
     </article>
@@ -569,44 +582,45 @@ function ExpenseDetailSheet({
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4">
       <div className="cc-bottom-sheet sm:max-w-lg">
+        <SheetHandle />
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm text-slate-500">{formatDate(expense.date)}</p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-950">{expense.title}</h2>
+            <Badge>Gasto · {formatDate(expense.date)}</Badge>
+            <h2 className="serif mt-2 text-2xl font-semibold tracking-[-0.02em] text-slate-950">{expense.title}</h2>
+            <p className="num mt-1 text-4xl font-semibold tracking-[-0.025em] text-slate-950">{formatCurrencyAmount(expense.amountCents, expense.currency)}</p>
+            <p className="mt-1 text-sm text-slate-500">{expense.currency} · {splitModeLabel(expense.splitMode)}</p>
           </div>
-          <button type="button" onClick={onClose} className="cc-button-ghost">
-            Cerrar
+          <button type="button" onClick={onClose} className="cc-button-secondary min-h-9 w-9 px-0" aria-label="Cerrar">
+            <Icon name="x" size={15} />
           </button>
         </div>
-        <p className="mt-3 text-2xl font-semibold text-slate-950">{formatCurrencyAmount(expense.amountCents, expense.currency)}</p>
-        <div className="mt-3 grid gap-1 text-sm text-slate-600">
-          <p>Modo de pago: {payerModeLabel(expense.payerMode)}</p>
-          <p>Modo de division: {splitModeLabel(expense.splitMode)}</p>
-        </div>
         <section className="mt-4 space-y-2">
-          <h3 className="font-semibold text-slate-900">Pagadores</h3>
+          <h3 className="cc-section-h">Pago</h3>
           {payers.map((payer) => (
-            <p key={payer.participantId} className="text-sm text-slate-600">
-              {participantName(payer.participantId)} pago {formatCurrencyAmount(payer.amountCents, expense.currency)}
-            </p>
+            <div key={payer.participantId} className="cc-row rounded-xl border border-slate-200 bg-white first:border-t">
+              <span className="min-w-0 flex-1 text-sm font-semibold text-slate-900">{participantName(payer.participantId)}</span>
+              <span className="num text-sm font-semibold text-slate-900">{formatCurrencyAmount(payer.amountCents, expense.currency)}</span>
+            </div>
           ))}
         </section>
         <section className="mt-4 space-y-2">
-          <h3 className="font-semibold text-slate-900">Division</h3>
+          <h3 className="cc-section-h">Division</h3>
           {splits.map((split) => (
-            <p key={split.participantId} className="text-sm text-slate-600">
-              {participantName(split.participantId)} - {split.percentage != null ? `${formatPercent(split.percentage)} = ` : ''}{formatCurrencyAmount(split.amountCents, expense.currency)}
-            </p>
+            <div key={split.participantId} className="cc-row rounded-xl border border-slate-200 bg-white first:border-t">
+              <span className="min-w-0 flex-1 text-sm font-semibold text-slate-900">{participantName(split.participantId)}</span>
+              <span className="num text-sm font-semibold text-slate-900">{split.percentage != null ? `${formatPercent(split.percentage)} · ` : ''}{formatCurrencyAmount(split.amountCents, expense.currency)}</span>
+            </div>
           ))}
         </section>
         <section className="mt-4 space-y-2">
-          <h3 className="font-semibold text-slate-900">Resultado de este gasto</h3>
+          <h3 className="cc-section-h">Resultado de este gasto</h3>
           {Array.from(result.entries()).map(([participantId, values]) => {
             const balance = values.paid - values.owed;
             return (
-              <p key={participantId} className="text-sm text-slate-600">
-                {participantName(participantId)} queda {balance >= 0 ? '+' : '-'}{formatCurrencyAmount(Math.abs(balance), expense.currency)}
-              </p>
+              <div key={participantId} className="cc-row rounded-xl border border-slate-200 bg-white first:border-t">
+                <span className="min-w-0 flex-1 text-sm font-semibold text-slate-900">{participantName(participantId)}</span>
+                <span className="num text-sm font-semibold text-slate-900">{balance >= 0 ? '+' : '-'}{formatCurrencyAmount(Math.abs(balance), expense.currency)}</span>
+              </div>
             );
           })}
         </section>
@@ -646,23 +660,26 @@ function CycleDetailSheet({
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4">
       <div className="cc-bottom-sheet sm:max-w-lg">
+        <SheetHandle />
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm text-slate-500">{new Date(cycle.closedAt).toLocaleDateString('es-AR')}</p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-950">{cycle.title}</h2>
+            <Badge tone="info">Cierre · {new Date(cycle.closedAt).toLocaleDateString('es-AR')}</Badge>
+            <h2 className="serif mt-2 text-2xl font-semibold tracking-[-0.02em] text-slate-950">{cycle.title}</h2>
           </div>
-          <button type="button" onClick={onClose} className="cc-button-ghost">
-            Cerrar
+          <button type="button" onClick={onClose} className="cc-button-secondary min-h-9 w-9 px-0" aria-label="Cerrar">
+            <Icon name="x" size={15} />
           </button>
         </div>
         <section className="mt-4 space-y-2">
-          <h3 className="font-semibold text-slate-900">Estadisticas del cierre</h3>
+          <h3 className="cc-section-h">Estadisticas del cierre</h3>
           {stats.map((item) => (
-            <div key={item.currency} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">{item.currency}</p>
-              <p>Total gastado: {formatCurrencyAmount(item.totalExpenses, item.currency)}</p>
-              <p>{item.expenseCount} gastos</p>
-              <p>{item.paymentCount} pagos registrados</p>
+            <div key={item.currency} className="cc-card p-4 text-sm text-slate-700">
+              <Badge tone="info">{item.currency}</Badge>
+              <p className="num mt-2 text-3xl font-semibold tracking-[-0.025em] text-slate-950">{formatCurrencyAmount(item.totalExpenses, item.currency)}</p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-slate-100 p-3"><p className="text-xs text-slate-500">Gastos</p><p className="font-semibold text-slate-950">{item.expenseCount}</p></div>
+                <div className="rounded-xl bg-slate-100 p-3"><p className="text-xs text-slate-500">Pagos</p><p className="font-semibold text-slate-950">{item.paymentCount}</p></div>
+              </div>
               {item.topPayer ? <p>Quien pago mas: {item.topPayer.name} pago {formatCurrencyAmount(item.topPayer.amountCents, item.currency)}</p> : null}
               {item.topConsumer ? <p>Quien consumio mas: {item.topConsumer.name} consumio {formatCurrencyAmount(item.topConsumer.amountCents, item.currency)}</p> : null}
               {item.highestExpense ? <p>Gasto mas alto: {item.highestExpense.title} - {formatCurrencyAmount(item.highestExpense.amountCents, item.currency)}</p> : null}
@@ -670,20 +687,20 @@ function CycleDetailSheet({
           ))}
         </section>
         <section className="mt-4 space-y-2">
-          <h3 className="font-semibold text-slate-900">Gastos incluidos</h3>
+          <h3 className="cc-section-h">Gastos incluidos</h3>
           {expenses.length === 0 ? <p className="text-sm text-slate-500">Sin gastos incluidos.</p> : null}
           {expenses.map((expense) => (
-            <div key={expense.id} className="rounded-md bg-slate-50 p-2 text-sm text-slate-700">
+            <div key={expense.id} className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
               <p className="font-medium">{expense.title}</p>
         <p>{formatCurrencyAmount(expense.amountCents, expense.currency)} - {formatDate(expense.date)}</p>
             </div>
           ))}
         </section>
         <section className="mt-4 space-y-2">
-          <h3 className="font-semibold text-slate-900">Pagos incluidos</h3>
+          <h3 className="cc-section-h">Pagos incluidos</h3>
           {payments.length === 0 ? <p className="text-sm text-slate-500">Sin pagos incluidos.</p> : null}
           {payments.map((payment) => (
-            <div key={payment.id} className="rounded-md bg-slate-50 p-2 text-sm text-slate-700">
+            <div key={payment.id} className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
               <p className="font-medium">{participantName(payment.fromParticipantId)} le pago a {participantName(payment.toParticipantId)}</p>
               <p>{formatCurrencyAmount(payment.amountCents, payment.currency)} - {new Date(payment.createdAt).toLocaleDateString('es-AR')}</p>
             </div>

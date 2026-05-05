@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import type { GroupMembership, Participant, Profile } from '../types';
+import { Avatar, Badge, SettingsBlock } from './ui';
 
 type GroupProfileCardProps = {
   membership: GroupMembership | null;
@@ -48,24 +49,23 @@ export function GroupProfileCard({ membership, participants, profile, onSave }: 
         : 'Alias manual';
 
   return (
-    <section className="cc-card grid gap-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="cc-section-title">Mis datos en este grupo</h2>
-          <p className="mt-2 text-sm text-slate-600">Participante asociado: {participant.name}</p>
-          <p className="text-sm text-slate-600">Nombre en este grupo: {participant.name}</p>
-          <p className="text-sm text-slate-600">Alias en este grupo: {participant.alias || 'Sin alias'}</p>
-          <p className="text-sm text-slate-500">{sourceText}</p>
+    <SettingsBlock title="Mis datos en este grupo">
+      <div className="flex items-center gap-3 p-3">
+        <Avatar name={participant.name} size={44} />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-slate-950">{participant.name}</p>
+          <p className="mt-1 text-sm text-slate-600">Alias: {participant.alias || 'Sin alias'}</p>
+          <div className="mt-1"><Badge tone="neutral">{sourceText}</Badge></div>
         </div>
         {onSave ? (
-          <button type="button" onClick={() => setIsEditing((value) => !value)} className="cc-button-ghost">
-            Editar mis datos
+          <button type="button" onClick={() => setIsEditing((value) => !value)} className="cc-button-secondary min-h-9 px-3 text-xs">
+            Editar
           </button>
         ) : null}
       </div>
       {isEditing ? (
-        <form onSubmit={handleSubmit} className="grid gap-3">
-          {error ? <p className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+        <form onSubmit={handleSubmit} className="grid gap-3 border-t border-slate-200 p-3">
+          {error ? <p className="cc-banner cc-banner-error">{error}</p> : null}
           <label className="grid gap-1 text-sm font-medium text-slate-700">
             Nombre en este grupo
             <input value={name} onChange={(event) => setName(event.target.value)} className="cc-input" />
@@ -87,6 +87,6 @@ export function GroupProfileCard({ membership, participants, profile, onSave }: 
           </button>
         </form>
       ) : null}
-    </section>
+    </SettingsBlock>
   );
 }

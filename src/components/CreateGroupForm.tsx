@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
+import { Icon } from './ui';
 
 type CreateGroupFormProps = {
   onCreate: (input: { name: string; ownerParticipantName: string; ownerParticipantAlias?: string; ownerAliasSource?: 'profile' | 'custom' }) => void;
@@ -39,10 +40,15 @@ export function CreateGroupForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="cc-card grid gap-3">
-      <div>
-        <h2 className="cc-section-title">Crear grupo</h2>
-        <p className="cc-muted mt-1">Arma un espacio para cargar gastos y saldar cuentas.</p>
+    <form onSubmit={handleSubmit} className="cc-card grid gap-4 p-5">
+      <div className="flex items-start gap-3">
+        <span className="cc-icon-tile bg-[var(--cc-primary-soft)] text-[var(--cc-primary-ink)]">
+          <Icon name="plus" size={18} />
+        </span>
+        <div>
+          <h2 className="serif text-2xl font-semibold tracking-[-0.02em] text-slate-950">Crear grupo</h2>
+          <p className="cc-muted mt-1">Cena, viaje, casa compartida. Empeza con un nombre y despues invitas al resto.</p>
+        </div>
       </div>
       <label className="grid gap-1 text-sm font-medium text-slate-700" htmlFor="group-name">
         Nombre del grupo
@@ -78,10 +84,7 @@ export function CreateGroupForm({
             </label>
           </>
         ) : null}
-        <button
-          type="submit"
-          className="cc-button-primary"
-        >
+        <button type="submit" className="cc-button-primary w-full">
           Crear grupo
         </button>
     </form>

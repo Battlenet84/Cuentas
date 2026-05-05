@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { Logo } from './ui';
 
 type AuthScreenProps = {
   onSignIn: (email: string, password: string) => Promise<void>;
@@ -65,15 +66,20 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
   }
 
   return (
-    <main className="cc-app mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-6">
-      <section className="cc-card p-5">
-        <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">Cuentas Claras</p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-950">
-          {mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Crear cuenta' : 'Recuperar contrasena'}
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">Dividi gastos de grupos sin vueltas.</p>
+    <main className="cc-app mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-8">
+      <section className="grid gap-7">
+        <header className="pt-4">
+          <Logo />
+          <h1 className="serif mt-7 text-[2rem] font-semibold leading-tight tracking-[-0.025em] text-slate-950">
+            {mode === 'login' ? 'Bienvenido' : mode === 'signup' ? 'Crea tu cuenta' : 'Recuperar contrasena'}
+          </h1>
+          <p className="mt-2 max-w-sm text-[15px] leading-6 text-slate-700">
+            Dividi gastos de grupos sin vueltas. Claro para cargar, simple para saldar.
+          </p>
+        </header>
+
         {mode !== 'recovery' ? (
-        <div className="mt-5 grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1">
+        <div className="grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1">
           <button
             type="button"
             onClick={() => {
@@ -98,11 +104,12 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
           </button>
         </div>
         ) : (
-          <p className="mt-3 text-sm text-slate-600">
+          <p className="text-sm text-slate-600">
             Ingresa tu email y te enviamos instrucciones para restablecer tu contrasena.
           </p>
         )}
-        <form onSubmit={handleSubmit} className="mt-4 grid gap-3">
+
+        <form onSubmit={handleSubmit} className="cc-card grid gap-4 p-5">
           {error ? <p className="cc-banner cc-banner-error">{error}</p> : null}
           {successMessage ? <p className="cc-banner cc-banner-success">{successMessage}</p> : null}
           {mode === 'signup' ? (
@@ -151,11 +158,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
             />
           </label>
           ) : null}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="cc-button-primary"
-          >
+          <button type="submit" disabled={isSubmitting} className="cc-button-primary mt-1 w-full">
             {isSubmitting
               ? 'Procesando...'
               : mode === 'login'
@@ -165,7 +168,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
                   : 'Enviar instrucciones'}
           </button>
         </form>
-        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
+        <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
           {mode === 'login' ? (
             <>
               <button
