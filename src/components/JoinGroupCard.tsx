@@ -64,13 +64,13 @@ export function JoinGroupCard({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-4 bg-slate-50 px-4 py-6">
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <main className="cc-app mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-4 px-4 py-6">
+      <section className="cc-card p-5">
         <p className="text-sm font-medium text-teal-700">Cuentas Claras</p>
         <h1 className="mt-2 text-2xl font-semibold text-slate-950">Solicitar acceso a {group.name}</h1>
         <p className="mt-2 text-sm text-slate-600">Elegi quien sos en este grupo o crea un participante nuevo.</p>
 
-        {error ? <p className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+        {error ? <p className="cc-banner cc-banner-error mt-4">{error}</p> : null}
 
         {activeParticipants.length > 0 ? (
           <div className="mt-4 grid gap-2">
@@ -80,7 +80,7 @@ export function JoinGroupCard({
                 type="button"
                 disabled={isJoining || claimedIds.has(participant.id)}
                 onClick={() => handleExistingJoin(participant.id)}
-                className="min-h-11 rounded-md border border-slate-300 px-3 text-left font-medium text-slate-800 disabled:opacity-60"
+                className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 text-left font-medium text-slate-800 shadow-sm disabled:opacity-60"
               >
                 {participant.name}
                 {claimedIds.has(participant.id) ? (
@@ -100,26 +100,26 @@ export function JoinGroupCard({
                 setName(event.target.value);
                 setSelectedParticipantId('');
               }}
-              className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+              className="cc-input"
               placeholder="Tu nombre"
             />
           </label>
           <input
             value={alias}
             onChange={(event) => setAlias(event.target.value)}
-            className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+            className="cc-input"
             placeholder="Alias opcional"
           />
           <button
             type="submit"
             disabled={isJoining}
-            className="min-h-11 rounded-md bg-teal-700 px-4 font-semibold text-white disabled:bg-slate-300"
+            className="cc-button-primary disabled:bg-slate-300"
           >
             {isJoining ? 'Enviando...' : 'Enviar solicitud'}
           </button>
         </form>
 
-        <button type="button" onClick={onBack} className="mt-4 text-sm font-medium text-teal-800">
+        <button type="button" onClick={onBack} className="cc-button-ghost mt-4">
           Volver al inicio
         </button>
       </section>

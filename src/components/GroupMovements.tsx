@@ -193,7 +193,7 @@ export function GroupMovements({
               key={item.id}
               type="button"
               onClick={() => setFilter(item.id)}
-              className={`min-h-10 rounded-full border px-4 text-sm font-semibold ${
+              className={`min-h-10 rounded-full border px-4 text-sm font-semibold shadow-sm transition ${
                 filter === item.id
                   ? 'border-teal-700 bg-teal-700 text-white'
                   : 'border-slate-200 bg-white text-slate-700'
@@ -568,7 +568,7 @@ function ExpenseDetailSheet({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4">
-      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-4 shadow-xl sm:max-w-lg sm:rounded-2xl">
+      <div className="cc-bottom-sheet sm:max-w-lg">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm text-slate-500">{formatDate(expense.date)}</p>
@@ -645,7 +645,7 @@ function CycleDetailSheet({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4">
-      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-4 shadow-xl sm:max-w-lg sm:rounded-2xl">
+      <div className="cc-bottom-sheet sm:max-w-lg">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm text-slate-500">{new Date(cycle.closedAt).toLocaleDateString('es-AR')}</p>

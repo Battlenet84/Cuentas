@@ -638,7 +638,7 @@ function App() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen px-4 py-6">
+      <div className="cc-app min-h-screen px-4 py-6">
         <main className="cc-card mx-auto max-w-3xl">
           <p className="font-medium text-slate-800">Preparando identidad anónima...</p>
         </main>
@@ -648,8 +648,8 @@ function App() {
 
   if (authError) {
     return (
-      <div className="min-h-screen px-4 py-6">
-        <main className="mx-auto max-w-3xl rounded-xl border border-red-200 bg-red-50 p-5 text-red-800 shadow-sm">
+      <div className="cc-app min-h-screen px-4 py-6">
+        <main className="cc-banner cc-banner-error mx-auto max-w-3xl">
           <p className="font-medium">{authError}</p>
         </main>
       </div>
@@ -666,7 +666,7 @@ function App() {
 
   if (isLoadingGroup) {
     return (
-      <div className="min-h-screen px-4 py-6">
+      <div className="cc-app min-h-screen px-4 py-6">
         <main className="cc-card mx-auto max-w-3xl">
           <p className="font-medium text-slate-800">Cargando grupo...</p>
         </main>
@@ -690,9 +690,9 @@ function App() {
 
   if (route.kind === 'sharedGroup' && selectedGroup && state.accessStatus === 'pending') {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-4 py-6">
-        <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-900 shadow-sm">
-          <p className="text-sm font-semibold text-amber-700">Cuentas Claras</p>
+      <main className="cc-app mx-auto flex min-h-screen max-w-xl flex-col justify-center px-4 py-6">
+        <section className="cc-card p-5">
+          <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">Cuentas Claras</p>
           <h1 className="mt-2 text-xl font-semibold">Solicitud enviada</h1>
           <p className="mt-2 text-sm">Un administrador tiene que aprobar tu acceso.</p>
           <button type="button" onClick={openHome} className="cc-button-secondary mt-4">
@@ -705,8 +705,8 @@ function App() {
 
   if (route.kind === 'sharedGroup' && state.accessStatus === 'revoked') {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-4 py-6">
-        <section className="rounded-xl border border-red-200 bg-red-50 p-5 text-red-800 shadow-sm">
+      <main className="cc-app mx-auto flex min-h-screen max-w-xl flex-col justify-center px-4 py-6">
+        <section className="cc-banner cc-banner-error p-5">
           <h1 className="text-xl font-semibold">Tu acceso a este grupo fue revocado.</h1>
           <button type="button" onClick={openHome} className="cc-button-secondary mt-4">
             Volver al inicio
@@ -718,7 +718,7 @@ function App() {
 
   if (selectedGroup) {
     return (
-      <div className="min-h-screen">
+      <div className="cc-app min-h-screen">
         <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
           <GroupDetail
             group={selectedGroup}
@@ -763,7 +763,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="cc-app min-h-screen">
       <main className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6">
         <header className="pt-2">
           <p className="text-sm font-medium uppercase tracking-wide text-teal-700">Cuentas Claras</p>
@@ -772,7 +772,7 @@ function App() {
         </header>
 
         {!isSupabaseConfigured ? (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
+          <p className="cc-banner cc-banner-warning">
             Modo local activo. Para compartir grupos entre celulares configura Supabase.
           </p>
         ) : null}
@@ -788,7 +788,7 @@ function App() {
         ) : null}
 
         {routeMessage ? (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
+          <div className="cc-banner cc-banner-warning">
             <p>{routeMessage}</p>
             {route.kind === 'sharedGroup' && isSupabaseConfigured ? (
               <button type="button" onClick={() => refreshRemoteGroup(route.shareToken)} className="mt-2 font-semibold">

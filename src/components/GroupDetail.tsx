@@ -434,18 +434,18 @@ export function GroupDetail({
   return (
     <div className="min-h-screen pb-28 md:pb-0">
       <div className="space-y-5">
-        <header className="rounded-2xl bg-slate-950 p-4 text-white shadow-lg shadow-slate-200 md:p-5">
+        <header className="rounded-[28px] border border-slate-200 bg-white/95 p-4 shadow-lg shadow-[rgba(60,40,20,0.08)] md:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs text-slate-300">Grupo</p>
-              <h1 className="mt-1 text-xl font-semibold md:text-2xl">{group.name}</h1>
-              {syncStatus === 'error' ? <p className="mt-2 text-xs text-slate-300">No se pudo sincronizar.</p> : null}
+              <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Grupo</p>
+              <h1 className="mt-1 text-xl font-semibold text-slate-950 md:text-2xl">{group.name}</h1>
+              {syncStatus === 'error' ? <p className="mt-2 text-xs text-slate-500">No se pudo sincronizar.</p> : null}
             </div>
-            <button type="button" onClick={handleCopyGroupLink} className="rounded-lg px-2 py-1 text-xs font-semibold text-teal-100 hover:bg-white/10">
+            <button type="button" onClick={handleCopyGroupLink} className="cc-button-secondary min-h-10 px-3 text-xs">
               Copiar link
             </button>
           </div>
-          <p className="mt-3 text-sm text-slate-200">
+          <p className="mt-3 text-sm text-slate-600">
             Pendiente por saldar: {settlements.length === 0 ? 'Todo saldado' : currencies.map((currency) => formatCurrencyAmount(pendingSettlementByCurrency[currency] ?? 0, currency)).join(' · ')}
           </p>
         </header>
@@ -461,10 +461,10 @@ export function GroupDetail({
           </button>
         </div>
 
-        {copyStatus ? <p className="rounded-xl border border-teal-100 bg-teal-50 px-4 py-3 text-sm font-medium text-teal-800">{copyStatus}</p> : null}
+        {copyStatus ? <p className="cc-banner cc-banner-success">{copyStatus}</p> : null}
 
         {errorMessage ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="cc-banner cc-banner-error">
             <p>{errorMessage}</p>
             {onRetry ? (
               <button type="button" onClick={onRetry} className="mt-2 font-semibold text-red-800 underline-offset-4 hover:underline">
@@ -483,7 +483,7 @@ export function GroupDetail({
 
       {isExpensePanelOpen ? (
         <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-4">
-          <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-4 shadow-xl sm:max-w-xl sm:rounded-2xl">
+          <div className="cc-bottom-sheet">
             {expenseForm}
           </div>
         </div>

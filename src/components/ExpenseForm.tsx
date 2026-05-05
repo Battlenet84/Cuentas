@@ -264,7 +264,7 @@ export function ExpenseForm({
         <h2 className="text-lg font-semibold text-slate-950">{expense ? 'Editar gasto' : 'Agregar gasto'}</h2>
         <p className="cc-muted mt-1">Completa los datos y revisa que las sumas cierren.</p>
       </div>
-      {error ? <p className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="cc-banner cc-banner-error">{error}</p> : null}
 
       <section className="cc-card-soft grid gap-3">
         <h3 className="cc-section-title">Datos del gasto</h3>
@@ -314,7 +314,7 @@ export function ExpenseForm({
       <section className="cc-card-soft grid gap-3">
         <div>
           <p className="cc-section-title">Quien pago</p>
-          <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
+          <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-slate-100 p-1">
             {(['single', 'multiple'] as const).map((mode) => (
               <button
                 key={mode}
@@ -359,7 +359,7 @@ export function ExpenseForm({
       <section className="cc-card-soft grid gap-3">
         <div>
           <p className="cc-section-title">Como se divide</p>
-          <div className="mt-2 grid gap-2 rounded-xl bg-slate-100 p-1 sm:grid-cols-3">
+          <div className="mt-2 grid gap-2 rounded-2xl border border-slate-200 bg-slate-100 p-1 sm:grid-cols-3">
             {(['equal', 'manual', 'percentage'] as const).map((mode) => (
               <button
                 key={mode}

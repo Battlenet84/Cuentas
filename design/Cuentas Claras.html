@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1400"/>
+<title>Cuentas Claras — Diseño visual</title>
+<link rel="stylesheet" href="tokens.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet"/>
+<style>
+  html, body { margin: 0; padding: 0; background: #e8e3d8; font-family: 'Geist', -apple-system, sans-serif; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="cc-components.jsx"></script>
+<script type="text/babel" src="cc-screens-1.jsx"></script>
+<script type="text/babel" src="cc-screens-2.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+(() => {
+  const { useState } = React;
+
+  // ——— Design system reference card ———
+  const DSReference = () => (
+    <div style={{ width: 720, padding: 28, fontFamily: 'Geist, sans-serif', background: '#FBF7F1', border: '1px solid #E5DDCE', borderRadius: 20, color: '#1F1B16' }}>
+      <div style={{ fontFamily: 'Fraunces, serif', fontSize: 36, fontWeight: 600, letterSpacing: '-0.025em' }}>Sobremesa limpia</div>
+      <div style={{ fontSize: 14, color: '#4A423A', marginTop: 6, maxWidth: 540 }}>
+        Calidez del estilo "Sobremesa", aire y simplicidad de Linear/Paper, jerarquía de datos de fintech moderna. Para hablar de plata sin sentirse banco, ni infantil.
+      </div>
+
+      {/* Palette */}
+      <div style={{ marginTop: 24 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#8A7F70', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Paleta</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
+          {[
+            ['Bg',          '#F5EFE6'],
+            ['Surface',     '#FBF7F1'],
+            ['Surface 2',   '#F0E9DD'],
+            ['Line',        '#E5DDCE'],
+            ['Ink',         '#1F1B16'],
+            ['Ink 2',       '#4A423A'],
+            ['Primary',     '#B8553A'],
+            ['Primary soft','#F5DCCF'],
+            ['Positive',    '#5C7A3A'],
+            ['Negative',    '#C25B4E'],
+            ['Warning',     '#C58A2C'],
+            ['Info',        '#3F6F8A'],
+          ].map(([n, c]) => (
+            <div key={n}>
+              <div style={{ height: 56, borderRadius: 10, background: c, border: '1px solid rgba(60,40,20,0.08)' }}/>
+              <div style={{ fontSize: 11, marginTop: 6, fontWeight: 500 }}>{n}</div>
+              <div style={{ fontSize: 10, color: '#8A7F70', fontFamily: 'Geist Mono, monospace' }}>{c}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Type */}
+      <div style={{ marginTop: 24 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#8A7F70', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Tipografía</div>
+        <div style={{ display: 'flex', gap: 24, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontFamily: 'Fraunces, serif', fontSize: 38, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1 }}>Asado del finde</div>
+            <div style={{ fontSize: 11, color: '#8A7F70', marginTop: 4 }}>Fraunces 600 · titulares hero, nombres de grupo</div>
+          </div>
+          <div>
+            <div style={{ fontFamily: 'Geist, sans-serif', fontSize: 22, fontWeight: 600, letterSpacing: '-0.015em' }}>Total gastado</div>
+            <div style={{ fontSize: 11, color: '#8A7F70', marginTop: 4 }}>Geist 600 · títulos de sección</div>
+          </div>
+          <div>
+            <div style={{ fontFamily: 'Geist, sans-serif', fontSize: 32, fontWeight: 600, letterSpacing: '-0.025em', fontVariantNumeric: 'tabular-nums' }}>$ 150.300,00</div>
+            <div style={{ fontSize: 11, color: '#8A7F70', marginTop: 4 }}>Geist 600 tabular-nums · montos</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 14 }}>Body — el resto del texto.</div>
+            <div style={{ fontSize: 11, color: '#8A7F70', marginTop: 4 }}>Geist 400/500 · cuerpo</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Buttons */}
+      <div style={{ marginTop: 24 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#8A7F70', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Botones</div>
+        <div className="cc-app" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', background: 'transparent' }}>
+          <Button>Primary</Button>
+          <Button variant="secondary">Secondary</Button>
+          <Button variant="ghost">Ghost</Button>
+          <Button variant="danger">Danger</Button>
+          <Button size="sm">Small</Button>
+          <Button leftIcon="plus">Agregar gasto</Button>
+        </div>
+      </div>
+
+      {/* Badges */}
+      <div style={{ marginTop: 18 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#8A7F70', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Badges</div>
+        <div className="cc-app" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', background: 'transparent' }}>
+          <Badge tone="positive">Saldado</Badge>
+          <Badge tone="negative">Debés</Badge>
+          <Badge tone="warning">Pendiente</Badge>
+          <Badge tone="info">Vos</Badge>
+          <Badge tone="neutral">Inactivo</Badge>
+        </div>
+      </div>
+
+      {/* Notas */}
+      <div style={{ marginTop: 24 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#8A7F70', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Implementación · React + Tailwind</div>
+        <ul style={{ fontSize: 13, lineHeight: 1.55, color: '#4A423A', margin: 0, paddingLeft: 18 }}>
+          <li>Convertir <code>tokens.css</code> a <code>theme.extend</code> en <code>tailwind.config</code> (colors, borderRadius, fontFamily, boxShadow).</li>
+          <li>Usar <code>tabular-nums</code> en todo lo que sea monto: <code>className="tabular-nums"</code>.</li>
+          <li>Bottom sheet con Radix Dialog o Vaul; respetar <code>safe-area-inset-bottom</code> (env(safe-area-inset-bottom)).</li>
+          <li>Sticky CTA: <code>position: sticky; bottom: 0</code> con gradiente <code>from-bg/0 to-bg</code> de fade.</li>
+          <li>Tabs de grupo: scroll horizontal en pantallas chicas; no usar <code>overflow-x: hidden</code> en el padre.</li>
+          <li>Iconos: lucide-react (mismo trazo 1.5px que el set inline).</li>
+          <li>Avatares: derivar color del nombre con hash determinístico (8 paletas warm).</li>
+          <li>Multimoneda: <strong>nunca</strong> mezclar — un bloque por moneda en Resumen y Cierre.</li>
+        </ul>
+      </div>
+
+      {/* Riesgos */}
+      <div style={{ marginTop: 18 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#8A7F70', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Riesgos al implementar</div>
+        <ul style={{ fontSize: 13, lineHeight: 1.55, color: '#4A423A', margin: 0, paddingLeft: 18 }}>
+          <li><b>Eliminar</b> en cards de movimientos era muy expuesto: ahora vive solo en el detalle del gasto. Confirmá la lógica antes de quitarlo del listado.</li>
+          <li><b>Saldar</b> tiene que pedir confirmación con monto + receptor antes de marcar la deuda.</li>
+          <li><b>Cerrar período</b>: bloquear en UI no alcanza, validar en backend que no haya deudas en ninguna moneda.</li>
+          <li>Los <b>chips horizontales</b> de Movimientos pueden chocar con teclado virtual; testear en Android chico.</li>
+          <li>Si Fraunces no carga, fallback a Geist 600 letterspaced — no usar Times.</li>
+        </ul>
+      </div>
+
+      {/* No tocar */}
+      <div style={{ marginTop: 18 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#8A7F70', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Qué NO conviene cambiar</div>
+        <ul style={{ fontSize: 13, lineHeight: 1.55, color: '#4A423A', margin: 0, paddingLeft: 18 }}>
+          <li>La estructura de tabs Resumen / Movimientos / Personas / Ajustes — ya es clara y conocida por usuarios actuales.</li>
+          <li>Los modos de división (iguales / manual / %) — el segmented es el patrón correcto.</li>
+          <li>"Copiar alias / Copiar monto / Mercado Pago / Saldar" como acciones por deuda — son las 4 cosas que la gente quiere hacer.</li>
+          <li>Participantes ≠ Usuarios — mantener esta separación, sólo aclararla mejor en UI.</li>
+        </ul>
+      </div>
+    </div>
+  );
+
+  // ——— Frame wrapper to make screens look like a phone ———
+  const Frame = ({ children }) => (
+    <div style={{
+      width: 390, height: 844,
+      borderRadius: 44,
+      background: '#1F1B16',
+      padding: 8,
+      boxShadow: '0 24px 60px rgba(60,40,20,0.18), 0 4px 12px rgba(60,40,20,0.08)',
+    }}>
+      <div style={{
+        width: '100%', height: '100%',
+        borderRadius: 36, overflow: 'hidden',
+        background: '#F5EFE6', position: 'relative',
+      }}>
+        {children}
+      </div>
+    </div>
+  );
+
+  const App = () => (
+    <DesignCanvas>
+      <DCSection id="ds" title="Cuentas Claras — Sobremesa limpia"
+        subtitle="Dirección visual, paleta, tipografía y notas de implementación.">
+        <DCArtboard id="ds-ref" label="Design system" width={780} height={1100}>
+          <DSReference/>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="onboarding" title="Onboarding"
+        subtitle="Login / crear cuenta / recuperar contraseña.">
+        <DCArtboard id="login" label="01 · Login + Crear cuenta" width={406} height={860}>
+          <Frame><ScreenLogin/></Frame>
+        </DCArtboard>
+        <DCArtboard id="recover" label="02 · Recuperar contraseña" width={406} height={860}>
+          <Frame><ScreenRecover/></Frame>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="home" title="Home"
+        subtitle="Perfil + lista de grupos + crear grupo.">
+        <DCArtboard id="home" label="03 · Home" width={406} height={860}>
+          <Frame><ScreenHome/></Frame>
+        </DCArtboard>
+        <DCArtboard id="create" label="04 · Crear grupo" width={406} height={860}>
+          <Frame><ScreenCreate/></Frame>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="group" title="Detalle de grupo"
+        subtitle="Resumen, Movimientos, Personas, Ajustes — más detalle de gasto y cierre.">
+        <DCArtboard id="resumen" label="05 · Resumen" width={406} height={860}>
+          <Frame><ScreenResumen/></Frame>
+        </DCArtboard>
+        <DCArtboard id="add" label="06 · Agregar gasto" width={406} height={860}>
+          <Frame><ScreenAddExpense/></Frame>
+        </DCArtboard>
+        <DCArtboard id="movs" label="07 · Movimientos" width={406} height={860}>
+          <Frame><ScreenMovimientos/></Frame>
+        </DCArtboard>
+        <DCArtboard id="exp" label="08 · Detalle de gasto" width={406} height={860}>
+          <Frame><ScreenExpenseDetail/></Frame>
+        </DCArtboard>
+        <DCArtboard id="ppl" label="09 · Personas" width={406} height={860}>
+          <Frame><ScreenPersonas/></Frame>
+        </DCArtboard>
+        <DCArtboard id="set" label="10 · Ajustes" width={406} height={860}>
+          <Frame><ScreenAjustes/></Frame>
+        </DCArtboard>
+        <DCArtboard id="cierre" label="11 · Detalle de cierre" width={406} height={860}>
+          <Frame><ScreenCierre/></Frame>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="states" title="Estados vacíos y errores"
+        subtitle="Sin grupos, sin gastos, todo saldado, sin actividad, errores de sync, link inválido, acceso pendiente/revocado.">
+        <DCArtboard id="empties" label="12 · Estados" width={406} height={860}>
+          <Frame><ScreenEmpties/></Frame>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+})();
+</script>
+</body>
+</html>

@@ -65,7 +65,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-6">
+    <main className="cc-app mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-6">
       <section className="cc-card p-5">
         <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">Cuentas Claras</p>
         <h1 className="mt-2 text-3xl font-semibold text-slate-950">
@@ -73,7 +73,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
         </h1>
         <p className="mt-2 text-sm text-slate-600">Dividi gastos de grupos sin vueltas.</p>
         {mode !== 'recovery' ? (
-        <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+        <div className="mt-5 grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1">
           <button
             type="button"
             onClick={() => {
@@ -103,8 +103,8 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
           </p>
         )}
         <form onSubmit={handleSubmit} className="mt-4 grid gap-3">
-          {error ? <p className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-          {successMessage ? <p className="rounded-lg border border-teal-100 bg-teal-50 p-3 text-sm text-teal-800">{successMessage}</p> : null}
+          {error ? <p className="cc-banner cc-banner-error">{error}</p> : null}
+          {successMessage ? <p className="cc-banner cc-banner-success">{successMessage}</p> : null}
           {mode === 'signup' ? (
             <>
               <label className="grid gap-1 text-sm font-medium text-slate-700">

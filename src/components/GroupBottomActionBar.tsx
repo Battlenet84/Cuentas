@@ -5,7 +5,7 @@ type GroupBottomActionBarProps = {
 export function GroupBottomActionBar({ onAddExpense }: GroupBottomActionBarProps) {
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pt-3 shadow-[0_-12px_28px_rgba(15,23,42,0.12)] backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pt-3 shadow-[0_-12px_28px_rgba(60,40,20,0.12)] backdrop-blur md:hidden"
       style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
     >
       <button
