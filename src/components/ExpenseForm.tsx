@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { Expense, ExpensePayer, ExpenseSplit, Participant } from '../types';
 import { todayInputValue } from '../lib/dates';
 import { formatARS, parseARSInput } from '../lib/money';
+import { buildPercentageSplits, parsePercentageInput, percentageSum } from '../lib/percentageSplits';
 
 type ExpenseFormProps = {
   groupId: string;
@@ -14,6 +15,7 @@ type ExpenseFormProps = {
 };
 
 type AmountByParticipant = Record<string, string>;
+type PercentageByParticipant = Record<string, string>;
 
 export function ExpenseForm({
   groupId,
@@ -41,11 +43,12 @@ export function ExpenseForm({
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [payerMode, setPayerMode] = useState<'single' | 'multiple'>('single');
-  const [splitMode, setSplitMode] = useState<'equal' | 'manual'>('equal');
+  const [splitMode, setSplitMode] = useState<'equal' | 'manual' | 'percentage'>('equal');
   const [singlePayerId, setSinglePayerId] = useState('');
   const [payerAmounts, setPayerAmounts] = useState<AmountByParticipant>({});
   const [equalSplitIds, setEqualSplitIds] = useState<string[]>([]);
   const [splitAmounts, setSplitAmounts] = useState<AmountByParticipant>({});
+  const [splitPercentages, setSplitPercentages] = useState<PercentageByParticipant>({});
   const [date, setDate] = useState(todayInputValue());
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,6 +56,7 @@ export function ExpenseForm({
   const amountCents = parseARSInput(amount) ?? 0;
   const payerTotalCents = sumAmounts(payerAmounts);
   const splitTotalCents = sumAmounts(splitAmounts);
+  const splitPercentageTotal = percentageSum(splitPercentages);
   const allActiveSplitIds = activeParticipants.map((participant) => participant.id);
   const areAllActiveSplitsSelected = allActiveSplitIds.length > 0 && allActiveSplitIds.every((id) => equalSplitIds.includes(id));
   const draftKey = expense?.id ?? 'new-expense';
@@ -72,6 +76,7 @@ export function ExpenseForm({
       setPayerAmounts({});
       setEqualSplitIds(activeParticipants.map((participant) => participant.id));
       setSplitAmounts({});
+      setSplitPercentages({});
       setDate(todayInputValue());
       setError(null);
       return;
@@ -90,6 +95,7 @@ export function ExpenseForm({
     setPayerAmounts(toAmountMap(resolvedPayers));
     setEqualSplitIds(resolvedSplits.filter((split) => split.amountCents > 0).map((split) => split.participantId));
     setSplitAmounts(toAmountMap(resolvedSplits));
+    setSplitPercentages(toPercentageMap(resolvedSplits));
     setDate(expense.date);
     setError(null);
   }, [draftKey]);
@@ -103,6 +109,7 @@ export function ExpenseForm({
     setPayerAmounts({});
     setEqualSplitIds(activeParticipants.map((participant) => participant.id));
     setSplitAmounts({});
+    setSplitPercentages({});
     setDate(todayInputValue());
     setError(null);
   }
@@ -155,6 +162,16 @@ export function ExpenseForm({
         .filter((split) => split.amountCents > 0);
     }
 
+    if (splitMode === 'percentage') {
+      return buildPercentageSplits(
+        totalCents,
+        availableParticipants.map((participant) => ({
+          participantId: participant.id,
+          percentage: parsePercentageInput(splitPercentages[participant.id] ?? '') ?? 0
+        }))
+      );
+    }
+
     return splitEqually(totalCents, equalSplitIds);
   }
 
@@ -192,6 +209,11 @@ export function ExpenseForm({
 
     if (splitMode === 'manual' && splits.reduce((total, split) => total + split.amountCents, 0) !== totalCents) {
       setError('La suma de la division tiene que coincidir con el total.');
+      return;
+    }
+
+    if (splitMode === 'percentage' && Math.abs(splitPercentageTotal - 100) > 0.001) {
+      setError('La suma de porcentajes tiene que ser 100%.');
       return;
     }
 
@@ -318,14 +340,14 @@ export function ExpenseForm({
         <div>
           <p className="text-sm font-semibold text-slate-900">Como se divide</p>
           <div className="mt-2 grid grid-cols-2 gap-2 rounded-md bg-slate-100 p-1">
-            {(['equal', 'manual'] as const).map((mode) => (
+            {(['equal', 'manual', 'percentage'] as const).map((mode) => (
               <button
                 key={mode}
                 type="button"
                 onClick={() => setSplitMode(mode)}
                 className={`min-h-10 rounded px-3 text-sm font-semibold ${splitMode === mode ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600'}`}
               >
-                {mode === 'equal' ? 'Partes iguales' : 'Montos manuales'}
+                {mode === 'equal' ? 'Partes iguales' : mode === 'manual' ? 'Montos manuales' : 'Por porcentaje'}
               </button>
             ))}
           </div>
@@ -351,7 +373,7 @@ export function ExpenseForm({
               </label>
             ))}
           </div>
-        ) : (
+        ) : splitMode === 'manual' ? (
           <div className="grid gap-2">
             <ProgressLine currentCents={splitTotalCents} totalCents={amountCents} label="Asignado" />
             {availableParticipants.map((participant) => (
@@ -362,6 +384,39 @@ export function ExpenseForm({
                 onChange={(value) => setParticipantAmount(setSplitAmounts, participant.id, value)}
               />
             ))}
+          </div>
+        ) : (
+          <div className="grid gap-2">
+            <PercentageProgress current={splitPercentageTotal} />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSplitPercentages(splitPercentagesEqually(availableParticipants.map((participant) => participant.id)))}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium"
+              >
+                Dividir en partes iguales
+              </button>
+              <button
+                type="button"
+                onClick={() => setSplitPercentages({})}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium"
+              >
+                Limpiar porcentajes
+              </button>
+            </div>
+            {availableParticipants.map((participant) => {
+              const percentage = parsePercentageInput(splitPercentages[participant.id] ?? '') ?? 0;
+              const splitAmount = buildPercentageSplits(amountCents, [{ participantId: participant.id, percentage }])[0]?.amountCents ?? 0;
+              return (
+                <PercentageRow
+                  key={participant.id}
+                  participant={participant}
+                  value={splitPercentages[participant.id] ?? ''}
+                  amountCents={splitAmount}
+                  onChange={(value) => setParticipantAmount(setSplitPercentages, participant.id, value)}
+                />
+              );
+            })}
           </div>
         )}
       </section>
@@ -403,6 +458,21 @@ function ProgressLine({ currentCents, totalCents, label }: { currentCents: numbe
   );
 }
 
+function PercentageProgress({ current }: { current: number }) {
+  const difference = 100 - current;
+  let detail = 'La suma de porcentajes tiene que ser 100%.';
+  if (difference > 0) detail = `Faltan ${formatPercentage(difference)}`;
+  if (difference < 0) detail = `Te pasaste por ${formatPercentage(Math.abs(difference))}`;
+  if (Math.abs(difference) < 0.001) detail = 'La suma coincide.';
+
+  return (
+    <p className="text-sm text-slate-600">
+      Asignado: {formatPercentage(current)} de 100%
+      <span className="ml-1 font-medium text-slate-700">{detail}</span>
+    </p>
+  );
+}
+
 function MoneyRow({
   participant,
   value,
@@ -426,12 +496,61 @@ function MoneyRow({
   );
 }
 
+function PercentageRow({
+  participant,
+  value,
+  amountCents,
+  onChange
+}: {
+  participant: Participant;
+  value: string;
+  amountCents: number;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="grid gap-1 text-sm font-medium text-slate-700">
+      {participant.name}
+      <div className="flex items-center gap-2">
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="min-h-11 flex-1 rounded-md border border-slate-300 px-3 text-base"
+          inputMode="decimal"
+          placeholder="0"
+        />
+        <span className="w-24 text-right text-sm text-slate-500">{formatARS(amountCents)}</span>
+      </div>
+    </label>
+  );
+}
+
 function sumAmounts(values: AmountByParticipant): number {
   return Object.values(values).reduce((total, value) => total + (parseARSInput(value) ?? 0), 0);
 }
 
 function toAmountMap(items: Array<{ participantId: string; amountCents: number }>): AmountByParticipant {
   return Object.fromEntries(items.map((item) => [item.participantId, formatARS(item.amountCents).replace('$', '').trim()]));
+}
+
+function toPercentageMap(items: Array<{ participantId: string; percentage?: number | null }>): PercentageByParticipant {
+  return Object.fromEntries(items.filter((item) => typeof item.percentage === 'number').map((item) => [item.participantId, String(item.percentage)]));
+}
+
+function splitPercentagesEqually(participantIds: string[]): PercentageByParticipant {
+  if (participantIds.length === 0) return {};
+  const base = Math.floor((10000 / participantIds.length)) / 100;
+  let remaining = Math.round((100 - base * participantIds.length) * 100);
+  return Object.fromEntries(
+    participantIds.map((participantId) => {
+      const extra = remaining > 0 ? 0.01 : 0;
+      remaining -= extra ? 1 : 0;
+      return [participantId, formatPercentage(base + extra).replace('%', '')];
+    })
+  );
+}
+
+function formatPercentage(value: number): string {
+  return new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 }).format(value) + '%';
 }
 
 function splitEqually(totalCents: number, participantIds: string[]): ExpenseSplit[] {

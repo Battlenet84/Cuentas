@@ -28,6 +28,7 @@ type RemoteParticipant = {
   group_id: string;
   name: string;
   alias: string | null;
+  alias_source?: 'profile' | 'custom' | 'manual';
   is_active: boolean;
   created_at: string;
 };
@@ -37,6 +38,7 @@ type RemoteExpensePayer = {
   participant_id?: string;
   amountCents?: number;
   amount_cents?: number;
+  percentage?: number | null;
 };
 
 type RemoteExpenseSplit = RemoteExpensePayer;
@@ -49,9 +51,9 @@ type RemoteExpense = {
   paid_by_participant_id: string | null;
   split_participant_ids: string[] | null;
   payer_mode?: 'single' | 'multiple';
-  split_mode?: 'equal' | 'manual';
   payerMode?: 'single' | 'multiple';
-  splitMode?: 'equal' | 'manual';
+  split_mode?: 'equal' | 'manual' | 'percentage';
+  splitMode?: 'equal' | 'manual' | 'percentage';
   payers?: RemoteExpensePayer[];
   splits?: RemoteExpenseSplit[];
   date: string;
@@ -167,6 +169,7 @@ function mapParticipant(participant: RemoteParticipant): Participant {
     groupId: participant.group_id,
     name: participant.name,
     alias: participant.alias ?? undefined,
+    aliasSource: participant.alias_source ?? 'manual',
     isActive: participant.is_active
   };
 }
@@ -175,7 +178,7 @@ function mapExpensePayer(payer: RemoteExpensePayer): ExpensePayer | null {
   const participantId = payer.participantId ?? payer.participant_id;
   const amountCents = payer.amountCents ?? payer.amount_cents;
   if (!participantId || typeof amountCents !== 'number') return null;
-  return { participantId, amountCents };
+  return { participantId, amountCents, percentage: payer.percentage ?? null };
 }
 
 function mapExpense(expense: RemoteExpense): Expense {
@@ -319,7 +322,8 @@ function expensePayload(expense: Omit<Expense, 'id' | 'createdAt'> | Expense) {
     })),
     p_splits: (expense.splits ?? []).map((split) => ({
       participantId: split.participantId,
-      amountCents: split.amountCents
+      amountCents: split.amountCents,
+      percentage: split.percentage ?? null
     })),
     p_payer_mode: expense.payerMode ?? 'single',
     p_split_mode: expense.splitMode ?? 'equal'
@@ -362,10 +366,21 @@ export async function upsertMyProfile(input: { displayName?: string; paymentAlia
   return mapProfile(assertData(data as RemoteProfile | null, error, 'No se pudo guardar tu perfil.'));
 }
 
+export async function updateMyProfile(input: { displayName?: string; paymentAlias?: string }): Promise<Profile> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('update_my_profile', {
+    p_display_name: input.displayName?.trim() || null,
+    p_payment_alias: input.paymentAlias?.trim() || null
+  });
+
+  return mapProfile(assertData(data as RemoteProfile | null, error, 'No se pudo guardar tu perfil.'));
+}
+
 export async function createRemoteGroup(input: {
   name: string;
   ownerParticipantName: string;
   ownerParticipantAlias?: string;
+  ownerAliasSource?: 'profile' | 'custom' | 'manual';
 }): Promise<Group> {
   const client = getSupabaseClient();
   const shareToken = createShareToken();
@@ -373,7 +388,8 @@ export async function createRemoteGroup(input: {
     p_name: input.name,
     p_share_token: shareToken,
     p_owner_participant_name: input.ownerParticipantName,
-    p_owner_participant_alias: input.ownerParticipantAlias ?? null
+    p_owner_participant_alias: input.ownerParticipantAlias ?? null,
+    p_owner_alias_source: input.ownerAliasSource ?? 'profile'
   });
 
   return mapGroup(assertData(data as RemoteGroup | null, error, 'No se pudo crear el grupo.'));
@@ -396,6 +412,21 @@ export async function joinGroupByToken(
     membership: mapMembership(result.membership),
     participant: result.participant ? mapParticipant(result.participant) : null
   };
+}
+
+export async function updateMyGroupProfile(
+  shareToken: string,
+  input: { participantName: string; participantAlias?: string; useProfileAlias: boolean }
+): Promise<Participant> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('update_my_group_profile', {
+    p_share_token: shareToken,
+    p_participant_name: input.participantName,
+    p_participant_alias: input.participantAlias ?? null,
+    p_use_profile_alias: input.useProfileAlias
+  });
+
+  return mapParticipant(assertData(data as RemoteParticipant | null, error, 'No se pudieron guardar tus datos.'));
 }
 
 export async function updateMyGroupIdentity(shareToken: string, participantId: string): Promise<GroupMembership> {

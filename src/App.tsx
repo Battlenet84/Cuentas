@@ -5,6 +5,7 @@ import { GroupList } from './components/GroupList';
 import { JoinGroupCard } from './components/JoinGroupCard';
 import { AuthScreen } from './components/AuthScreen';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
+import { ProfileCard } from './components/ProfileCard';
 import {
   assignSettlementCycleToExpenses,
   createExpense,
@@ -39,6 +40,8 @@ import {
   upsertMyProfile,
   type GroupMemberView,
   updateMyGroupIdentity,
+  updateMyGroupProfile,
+  updateMyProfile,
   updateRemoteExpense,
   updateRemoteParticipant,
   voidSettlementPaymentByToken
@@ -342,7 +345,12 @@ function App() {
     navigate({ kind: 'home' }, true);
   }
 
-  async function handleCreateGroup(input: { name: string; ownerParticipantName: string; ownerParticipantAlias?: string }) {
+  async function handleSaveProfile(input: { displayName?: string; paymentAlias?: string }) {
+    const nextProfile = await updateMyProfile(input);
+    setProfile(nextProfile);
+  }
+
+  async function handleCreateGroup(input: { name: string; ownerParticipantName: string; ownerParticipantAlias?: string; ownerAliasSource?: 'profile' | 'custom' }) {
     if (isSupabaseConfigured) {
       if (!authUserId) {
         setRouteMessage('Iniciá sesión para crear grupos.');
@@ -400,6 +408,16 @@ function App() {
       route.shareToken,
       () => updateMyGroupIdentity(route.shareToken, participantId).then(() => undefined),
       'No se pudo guardar tu identidad.'
+    );
+  }
+
+  async function handleUpdateMyGroupProfile(input: { participantName: string; participantAlias?: string; useProfileAlias: boolean }) {
+    if (route.kind !== 'sharedGroup') return;
+
+    await runRemoteOperation(
+      route.shareToken,
+      () => updateMyGroupProfile(route.shareToken, input).then(() => undefined),
+      'No se pudieron guardar tus datos.'
     );
   }
 
@@ -708,6 +726,7 @@ function App() {
             settlementCycles={state.settlementCycles}
             settlementPayments={state.settlementPayments}
             activityLogs={state.activityLogs ?? []}
+            profile={profile}
             currentMembership={state.currentMembership ?? null}
             members={groupMembers}
             onBack={openHome}
@@ -731,6 +750,7 @@ function App() {
             onPromoteMember={route.kind === 'sharedGroup' ? handlePromoteMember : undefined}
             onDemoteOwner={route.kind === 'sharedGroup' ? handleDemoteOwner : undefined}
             onRegenerateInvite={route.kind === 'sharedGroup' ? handleRegenerateInvite : undefined}
+            onUpdateMyGroupProfile={route.kind === 'sharedGroup' ? handleUpdateMyGroupProfile : undefined}
             errorMessage={detailError}
             isSaving={isSaving}
             useSharedLink={route.kind === 'sharedGroup'}
@@ -786,6 +806,7 @@ function App() {
           defaultOwnerAlias={profile?.paymentAlias ?? ''}
         />
         {isSaving ? <p className="text-sm font-medium text-slate-600">Guardando cambios...</p> : null}
+        {isSupabaseConfigured ? <ProfileCard profile={profile} onSave={handleSaveProfile} /> : null}
         {isSupabaseConfigured ? <h2 className="text-lg font-semibold text-slate-900">Mis grupos</h2> : null}
         <GroupList groups={state.groups} participants={state.participants} onOpenGroup={openLocalGroup} />
       </main>

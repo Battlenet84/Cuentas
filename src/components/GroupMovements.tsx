@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import type { ActivityLog, Expense, Participant, SettlementCycle, SettlementPayment } from '../types';
+import type { ActivityLog, Expense, ExpenseSplit, Participant, SettlementCycle, SettlementPayment } from '../types';
 import { formatDate, formatMovementDateGroup, movementDateKey } from '../lib/dates';
 import { formatARS } from '../lib/money';
 import { EmptyState } from './EmptyState';
 
 type MovementFilter = 'all' | 'expenses' | 'payments' | 'cycles' | 'activity';
+type DateFilter = 'all' | 'today' | 'last7' | 'month';
 
 type MovementItem =
   | { type: 'expense'; date: string; sortDate: string; expense: Expense }
@@ -42,6 +43,9 @@ export function GroupMovements({
   onVoidSettlementPayment
 }: GroupMovementsProps) {
   const [filter, setFilter] = useState<MovementFilter>('all');
+  const [query, setQuery] = useState('');
+  const [participantFilter, setParticipantFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [error, setError] = useState<string | null>(null);
   const [detailExpense, setDetailExpense] = useState<Expense | null>(null);
   const [detailCycle, setDetailCycle] = useState<SettlementCycle | null>(null);
@@ -58,7 +62,9 @@ export function GroupMovements({
       if (filter === 'cycles') return item.type === 'cycle';
       if (filter === 'activity') return item.type === 'activity';
       return item.type !== 'activity';
-    });
+    }).filter((item) => matchesParticipant(item, participantFilter))
+      .filter((item) => matchesDate(item.date, dateFilter))
+      .filter((item) => matchesQuery(item, query));
 
     const sorted = items.sort((a, b) => b.sortDate.localeCompare(a.sortDate));
     const groups = new Map<string, MovementItem[]>();
@@ -68,7 +74,7 @@ export function GroupMovements({
     }
 
     return Array.from(groups.entries()).map(([date, groupItems]) => ({ date, items: groupItems }));
-  }, [activityLogs, expenses, filter, settlementCycles, settlementPayments]);
+  }, [activityLogs, dateFilter, expenses, filter, participantFilter, query, settlementCycles, settlementPayments]);
 
   async function handleDelete(expense: Expense) {
     const confirmed = window.confirm(`Eliminar el gasto "${expense.title}"?`);
@@ -113,15 +119,62 @@ export function GroupMovements({
   }
 
   function emptyTitle(): string {
+    if (query.trim() || participantFilter !== 'all' || dateFilter !== 'all') return 'No encontramos movimientos con esos filtros.';
     if (filter === 'expenses') return 'Todavia no hay gastos.';
     if (filter === 'payments') return 'Todavia no hay pagos registrados.';
     if (filter === 'cycles') return 'Todavia no hay cierres.';
-    if (filter === 'activity') return 'Todavia no hay actividad.';
+    if (filter === 'activity') return 'Todavia no hay actividad registrada.';
     return 'Todavia no hay movimientos.';
+  }
+
+  function resetFilters() {
+    setQuery('');
+    setParticipantFilter('all');
+    setDateFilter('all');
+  }
+
+  function participantLabel(id: string): string {
+    const participant = participants.find((item) => item.id === id);
+    if (!participant) return 'Participante';
+    return participant.alias ? `${participant.name} (${participant.alias})` : participant.name;
+  }
+
+  function matchesParticipant(item: MovementItem, participantId: string): boolean {
+    if (participantId === 'all') return true;
+    if (item.type === 'expense') return expenseParticipantIds(item.expense).includes(participantId);
+    if (item.type === 'payment') return item.payment.fromParticipantId === participantId || item.payment.toParticipantId === participantId;
+    if (item.type === 'activity') {
+      return item.activity.actorParticipantId === participantId || Object.values(item.activity.metadata).includes(participantId);
+    }
+    return false;
+  }
+
+  function matchesQuery(item: MovementItem, rawQuery: string): boolean {
+    const normalized = normalize(rawQuery);
+    if (!normalized) return true;
+    return normalize(searchText(item)).includes(normalized);
+  }
+
+  function searchText(item: MovementItem): string {
+    if (item.type === 'expense') {
+      const names = expenseParticipantIds(item.expense).map(participantLabel).join(' ');
+      return `gasto ${item.expense.title} ${formatARS(item.expense.amountCents)} ${names}`;
+    }
+    if (item.type === 'payment') {
+      return `pago saldar ${participantLabel(item.payment.fromParticipantId)} ${participantLabel(item.payment.toParticipantId)} ${formatARS(item.payment.amountCents)}`;
+    }
+    if (item.type === 'cycle') return `cierre periodo ${item.cycle.title}`;
+    return `actividad ${activityText(item.activity, item.activity.actorName || 'Alguien', participantName)}`;
   }
 
   return (
     <section className="space-y-4">
+      <input
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        className="min-h-11 w-full rounded-md border border-slate-300 px-3 text-base"
+        placeholder="Buscar movimiento"
+      />
       <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
         <div className="flex min-w-max gap-2">
           {filters.map((item) => (
@@ -141,10 +194,34 @@ export function GroupMovements({
         </div>
       </div>
 
+      <div className="grid gap-2 sm:grid-cols-2">
+        <select value={participantFilter} onChange={(event) => setParticipantFilter(event.target.value)} className="min-h-11 rounded-md border border-slate-300 px-3 text-base">
+          <option value="all">Participante: Todos</option>
+          {participants.map((participant) => (
+            <option key={participant.id} value={participant.id}>
+              {participant.name}
+            </option>
+          ))}
+        </select>
+        <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as DateFilter)} className="min-h-11 rounded-md border border-slate-300 px-3 text-base">
+          <option value="all">Fecha: Todas</option>
+          <option value="today">Hoy</option>
+          <option value="last7">Ultimos 7 dias</option>
+          <option value="month">Este mes</option>
+        </select>
+      </div>
+
       {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
 
       {movementGroups.length === 0 ? (
-        <EmptyState title={emptyTitle()} />
+        <div className="space-y-3">
+          <EmptyState title={emptyTitle()} />
+          {(query.trim() || participantFilter !== 'all' || dateFilter !== 'all') ? (
+            <button type="button" onClick={resetFilters} className="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700">
+              Limpiar filtros
+            </button>
+          ) : null}
+        </div>
       ) : (
         <div className="space-y-5">
           {movementGroups.map((group) => (
@@ -257,7 +334,7 @@ function ExpenseMovementCard({
       </div>
       <div className="mt-2 space-y-1 text-sm text-slate-600">
         <p>{payerText}</p>
-        <p>{(expense.splitMode ?? 'equal') === 'manual' ? 'Division manual' : 'Partes iguales'}</p>
+        <p>{splitModeLabel(expense.splitMode)}</p>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" onClick={() => onViewDetail(expense)} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700">
@@ -335,25 +412,25 @@ function activityText(activity: ActivityLog, actor: string, participantName: (id
   const amountCents = metadataNumber(activity.metadata, 'amount_cents');
 
   if (activity.action === 'expense_created') return `${actor} cargo el gasto${title ? ` "${title}"` : ''}${amountCents ? ` por ${formatARS(amountCents)}` : ''}`;
-  if (activity.action === 'expense_updated') return `${actor} edito un gasto${title ? `: ${title}` : ''}`;
-  if (activity.action === 'expense_deleted') return `${actor} elimino un gasto${title ? `: ${title}` : ''}`;
+  if (activity.action === 'expense_updated') return `${actor} edito el gasto${title ? ` "${title}"` : ''}`;
+  if (activity.action === 'expense_deleted') return `${actor} elimino el gasto${title ? ` "${title}"` : ''}`;
   if (activity.action === 'payment_created') {
     const fromId = metadataString(activity.metadata, 'from_participant_id');
     const toId = metadataString(activity.metadata, 'to_participant_id');
     const amount = amountCents ? ` de ${formatARS(amountCents)}` : '';
     const parties = fromId && toId ? `: ${participantName(fromId)} le pago a ${participantName(toId)}` : '';
-    return `${actor} saldo una deuda${amount}${parties}`;
+    return `${actor} marco como saldada una deuda${amount}${parties}`;
   }
   if (activity.action === 'payment_voided') return `${actor} anulo un pago${amountCents ? ` de ${formatARS(amountCents)}` : ''}`;
   if (activity.action === 'period_closed') return `${actor} cerro un periodo`;
-  if (activity.action === 'participant_created') return `${actor} agrego a ${metadataString(activity.metadata, 'name') ?? 'un participante'}`;
-  if (activity.action === 'participant_updated') return `${actor} edito a ${metadataString(activity.metadata, 'name') ?? 'un participante'}`;
+  if (activity.action === 'participant_created') return `${actor} agrego a ${metadataString(activity.metadata, 'name') ?? 'un participante'} como participante`;
+  if (activity.action === 'participant_updated') return `${actor} edito un participante`;
   if (activity.action === 'member_revoked') return `${actor} revoco el acceso de un miembro`;
-  if (activity.action === 'member_approved') return `${actor} aprobo a un miembro`;
-  if (activity.action === 'member_rejected') return `${actor} rechazo una solicitud`;
+  if (activity.action === 'member_approved') return `${actor} aprobo una solicitud de acceso`;
+  if (activity.action === 'member_rejected') return `${actor} rechazo una solicitud de acceso`;
   if (activity.action === 'member_promoted_to_owner') return `${actor} hizo owner a un miembro`;
-  if (activity.action === 'member_demoted_to_member') return `${actor} quito owner a un miembro`;
-  if (activity.action === 'invite_regenerated') return `${actor} regenero el link`;
+  if (activity.action === 'member_demoted_to_member') return `${actor} quito el rol de owner a un miembro`;
+  if (activity.action === 'invite_regenerated') return `${actor} regenero el link de invitacion`;
   return `${actor} hizo un cambio en el grupo`;
 }
 
@@ -365,6 +442,55 @@ function metadataString(metadata: Record<string, unknown>, key: string): string 
 function metadataNumber(metadata: Record<string, unknown>, key: string): number | null {
   const value = metadata[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function expenseParticipantIds(expense: Expense): string[] {
+  return Array.from(
+    new Set([
+      ...(expense.payers ?? []).map((payer) => payer.participantId),
+      ...(expense.splits ?? []).map((split) => split.participantId),
+      ...(expense.paidByParticipantId ? [expense.paidByParticipantId] : []),
+      ...(expense.splitParticipantIds ?? [])
+    ])
+  );
+}
+
+function normalize(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+function matchesDate(value: string, filter: DateFilter): boolean {
+  if (filter === 'all') return true;
+  const date = parseDate(value);
+  if (!date) return false;
+  const now = new Date();
+  if (filter === 'today') return sameDay(date, now);
+  if (filter === 'last7') {
+    const start = new Date(now);
+    start.setDate(now.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+    return date >= start;
+  }
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+}
+
+function parseDate(value: string): Date | null {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function splitModeLabel(mode: Expense['splitMode']): string {
+  if (mode === 'manual') return 'Montos manuales';
+  if (mode === 'percentage') return 'Por porcentaje';
+  return 'Partes iguales';
+}
+
+function payerModeLabel(mode: Expense['payerMode']): string {
+  return mode === 'multiple' ? 'Varias personas' : 'Una persona';
 }
 
 function CycleMovementCard({
@@ -412,10 +538,13 @@ function ExpenseDetailSheet({
       ? [{ participantId: expense.paidByParticipantId, amountCents: expense.amountCents }]
       : [];
   const equalSplitAmount = Math.round(expense.amountCents / Math.max(1, expense.splitParticipantIds?.length ?? 1));
-  const splits = expense.splits?.length
+  const splits: ExpenseSplit[] = expense.splits?.length
     ? expense.splits
     : (expense.splitParticipantIds ?? []).map((participantId) => ({ participantId, amountCents: equalSplitAmount }));
   const participantName = (id: string) => participants.find((participant) => participant.id === id)?.name ?? 'Participante';
+  const result = new Map<string, { paid: number; owed: number }>();
+  for (const payer of payers) result.set(payer.participantId, { paid: (result.get(payer.participantId)?.paid ?? 0) + payer.amountCents, owed: result.get(payer.participantId)?.owed ?? 0 });
+  for (const split of splits) result.set(split.participantId, { paid: result.get(split.participantId)?.paid ?? 0, owed: (result.get(split.participantId)?.owed ?? 0) + split.amountCents });
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4">
@@ -430,6 +559,10 @@ function ExpenseDetailSheet({
           </button>
         </div>
         <p className="mt-3 text-2xl font-semibold text-slate-950">{formatARS(expense.amountCents)}</p>
+        <div className="mt-3 grid gap-1 text-sm text-slate-600">
+          <p>Modo de pago: {payerModeLabel(expense.payerMode)}</p>
+          <p>Modo de division: {splitModeLabel(expense.splitMode)}</p>
+        </div>
         <section className="mt-4 space-y-2">
           <h3 className="font-semibold text-slate-900">Pagadores</h3>
           {payers.map((payer) => (
@@ -440,12 +573,22 @@ function ExpenseDetailSheet({
         </section>
         <section className="mt-4 space-y-2">
           <h3 className="font-semibold text-slate-900">Division</h3>
-          <p className="text-sm text-slate-600">{(expense.splitMode ?? 'equal') === 'manual' ? 'Manual' : 'Partes iguales'}</p>
           {splits.map((split) => (
             <p key={split.participantId} className="text-sm text-slate-600">
-              {participantName(split.participantId)} - {formatARS(split.amountCents)}
+              {participantName(split.participantId)} - {split.percentage != null ? `${formatPercent(split.percentage)} = ` : ''}{formatARS(split.amountCents)}
             </p>
           ))}
+        </section>
+        <section className="mt-4 space-y-2">
+          <h3 className="font-semibold text-slate-900">Resultado de este gasto</h3>
+          {Array.from(result.entries()).map(([participantId, values]) => {
+            const balance = values.paid - values.owed;
+            return (
+              <p key={participantId} className="text-sm text-slate-600">
+                {participantName(participantId)} queda {balance >= 0 ? '+' : '-'}{formatARS(Math.abs(balance))}
+              </p>
+            );
+          })}
         </section>
         <div className="mt-5 flex flex-wrap gap-2">
           <button type="button" onClick={() => onEdit(expense)} className="rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white">
@@ -458,6 +601,10 @@ function ExpenseDetailSheet({
       </div>
     </div>
   );
+}
+
+function formatPercent(value: number): string {
+  return new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 }).format(value) + '%';
 }
 
 function CycleDetailSheet({

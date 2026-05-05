@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 
 type CreateGroupFormProps = {
-  onCreate: (input: { name: string; ownerParticipantName: string; ownerParticipantAlias?: string }) => void;
+  onCreate: (input: { name: string; ownerParticipantName: string; ownerParticipantAlias?: string; ownerAliasSource?: 'profile' | 'custom' }) => void;
   requiresOwnerName?: boolean;
   defaultOwnerName?: string;
   defaultOwnerAlias?: string;
@@ -28,10 +28,12 @@ export function CreateGroupForm({
     const trimmedOwnerName = ownerParticipantName.trim();
     if (!trimmedName) return;
     if (requiresOwnerName && !trimmedOwnerName) return;
+    const aliasChanged = ownerParticipantAlias.trim() !== (defaultOwnerAlias ?? '').trim();
     onCreate({
       name: trimmedName,
       ownerParticipantName: trimmedOwnerName,
-      ownerParticipantAlias: ownerParticipantAlias.trim() || undefined
+      ownerParticipantAlias: ownerParticipantAlias.trim() || undefined,
+      ownerAliasSource: aliasChanged ? 'custom' : 'profile'
     });
     setName('');
   }

@@ -19,6 +19,7 @@ import { EmptyState } from './EmptyState';
 import { GroupBottomActionBar } from './GroupBottomActionBar';
 import { GroupTabs, type GroupTab } from './GroupTabs';
 import { GroupMovements } from './GroupMovements';
+import { GroupProfileCard } from './GroupProfileCard';
 
 type GroupDetailProps = {
   group: Group;
@@ -27,6 +28,7 @@ type GroupDetailProps = {
   settlementCycles: SettlementCycle[];
   settlementPayments: SettlementPayment[];
   activityLogs: ActivityLog[];
+  profile?: import('../types').Profile | null;
   currentMembership?: GroupMembership | null;
   members?: GroupMemberView[];
   onBack: () => void;
@@ -50,6 +52,7 @@ type GroupDetailProps = {
   onPromoteMember?: (membershipId: string) => Promise<void>;
   onDemoteOwner?: (membershipId: string) => Promise<void>;
   onRegenerateInvite?: () => Promise<void>;
+  onUpdateMyGroupProfile?: (input: { participantName: string; participantAlias?: string; useProfileAlias: boolean }) => Promise<void>;
   errorMessage?: string | null;
   isSaving?: boolean;
   useSharedLink?: boolean;
@@ -63,6 +66,7 @@ export function GroupDetail({
   settlementCycles,
   settlementPayments,
   activityLogs,
+  profile,
   currentMembership,
   members = [],
   onBack,
@@ -86,6 +90,7 @@ export function GroupDetail({
   onPromoteMember,
   onDemoteOwner,
   onRegenerateInvite,
+  onUpdateMyGroupProfile,
   errorMessage,
   isSaving = false,
   useSharedLink = false,
@@ -305,6 +310,12 @@ export function GroupDetail({
 
     return (
       <div className="space-y-5">
+        <GroupProfileCard
+          membership={currentMembership ?? null}
+          participants={groupParticipants}
+          profile={profile ?? null}
+          onSave={onUpdateMyGroupProfile}
+        />
         <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="font-semibold text-slate-900">Acceso al grupo</h2>
           <button

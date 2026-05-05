@@ -11,17 +11,20 @@ export type Participant = {
   groupId: string;
   name: string;
   alias?: string;
+  aliasSource?: 'profile' | 'custom' | 'manual';
   isActive: boolean;
 };
 
 export type ExpensePayer = {
   participantId: string;
   amountCents: number;
+  percentage?: number | null;
 };
 
 export type ExpenseSplit = {
   participantId: string;
   amountCents: number;
+  percentage?: number | null;
 };
 
 export type Expense = {
@@ -32,7 +35,7 @@ export type Expense = {
   paidByParticipantId?: string;
   splitParticipantIds?: string[];
   payerMode?: 'single' | 'multiple';
-  splitMode?: 'equal' | 'manual';
+  splitMode?: 'equal' | 'manual' | 'percentage';
   payers?: ExpensePayer[];
   splits?: ExpenseSplit[];
   date: string;

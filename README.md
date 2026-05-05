@@ -204,6 +204,12 @@ Personas esta separado en bloques:
 
 Ajustes queda solo para grupo, invitacion, periodo y cuenta. La administracion de miembros vive en Personas.
 
+## Mi perfil y alias
+
+Home incluye `Mi perfil`, con nombre predeterminado y alias predeterminado. Ese alias se usa para prellenar creacion de grupos y solicitudes de acceso.
+
+Dentro de Ajustes, `Mis datos en este grupo` permite cambiar nombre y alias solo para ese grupo. El alias puede seguir el perfil global (`profile`) o quedar personalizado para ese grupo (`custom`). Los participantes editados desde Personas quedan como alias manual (`manual`).
+
 ## Invitaciones y roles
 
 Los links de grupo ahora sirven para solicitar acceso, no para entrar directo. Si ya existe al menos un owner activo, una persona nueva queda `pending` hasta que un owner apruebe la solicitud. Si un grupo legacy no tiene ningun owner activo, el primer ingreso queda como owner activo para recuperar administracion.
@@ -216,7 +222,20 @@ Puede haber multiples owners. La app y las RPC no permiten quitar ni revocar al 
 
 ## Detalle de gasto
 
-En Movimientos, cada gasto tiene detalle con total, fecha, pagadores, division y acciones de editar/eliminar. No cambia la logica de calculo ni de guardado.
+En Movimientos, cada gasto tiene detalle con total, fecha, modo de pago, modo de division, pagadores, division y resultado de ese gasto (`pagado - adeudado`). Tambien permite editar o eliminar desde el detalle.
+
+## Division por porcentaje
+
+La division de gastos soporta:
+- partes iguales;
+- montos manuales;
+- porcentaje.
+
+El porcentaje se calcula en el formulario y se guarda en `expense_splits.amount_cents`; los balances siguen usando montos finales para no cambiar la logica contable. Para editar mejor, `expense_splits.percentage` conserva el porcentaje usado.
+
+## Buscador y filtros
+
+Movimientos incluye busqueda local y filtros por tipo, participante y fecha (`Hoy`, `Ultimos 7 dias`, `Este mes`). La actividad no aparece en `Todos`; se ve desde el filtro `Actividad`.
 
 ## Diagnostico antes de indices unicos
 
