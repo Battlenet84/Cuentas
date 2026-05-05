@@ -19,6 +19,7 @@ import {
   updateParticipant
 } from './data/storage';
 import {
+  approveGroupMember,
   closeRemoteSettlementCycle,
   createSettlementPaymentByToken,
   createRemoteExpense,
@@ -30,7 +31,10 @@ import {
   joinGroupByToken,
   loadGroupByShareToken,
   loadMyGroups,
+  demoteGroupOwnerToMember,
+  promoteGroupMemberToOwner,
   regenerateGroupInviteToken,
+  rejectGroupMember,
   revokeGroupMember,
   upsertMyProfile,
   type GroupMemberView,
@@ -264,7 +268,7 @@ function App() {
     } catch {
       setDetailError('No se pudo cargar la información del grupo.');
       setRouteMessage('No encontramos este grupo.');
-      setState({ groups: [], participants: [], expenses: [], settlementCycles: [], settlementPayments: [] });
+      setState({ groups: [], participants: [], expenses: [], settlementCycles: [], settlementPayments: [], activityLogs: [] });
       setGroupMembers([]);
       setSyncStatus('error');
     } finally {
@@ -350,7 +354,7 @@ function App() {
       setDetailError(null);
       try {
         const group = await createRemoteGroup(input);
-        setState({ groups: [group], participants: [], expenses: [], settlementCycles: [], settlementPayments: [] });
+        setState({ groups: [group], participants: [], expenses: [], settlementCycles: [], settlementPayments: [], activityLogs: [] });
         navigate({ kind: 'sharedGroup', shareToken: group.shareToken ?? group.id });
       } catch {
         setRouteMessage('No se pudo crear el grupo.');
@@ -421,6 +425,46 @@ function App() {
       route.shareToken,
       () => revokeGroupMember(route.shareToken, membershipId),
       'No se pudo revocar el acceso.'
+    );
+  }
+
+  async function handleApproveMember(membershipId: string) {
+    if (route.kind !== 'sharedGroup') return;
+
+    await runRemoteOperation(
+      route.shareToken,
+      () => approveGroupMember(route.shareToken, membershipId),
+      'No se pudo aprobar el acceso.'
+    );
+  }
+
+  async function handleRejectMember(membershipId: string) {
+    if (route.kind !== 'sharedGroup') return;
+
+    await runRemoteOperation(
+      route.shareToken,
+      () => rejectGroupMember(route.shareToken, membershipId),
+      'No se pudo rechazar el acceso.'
+    );
+  }
+
+  async function handlePromoteMember(membershipId: string) {
+    if (route.kind !== 'sharedGroup') return;
+
+    await runRemoteOperation(
+      route.shareToken,
+      () => promoteGroupMemberToOwner(route.shareToken, membershipId),
+      'No se pudo hacer owner.'
+    );
+  }
+
+  async function handleDemoteOwner(membershipId: string) {
+    if (route.kind !== 'sharedGroup') return;
+
+    await runRemoteOperation(
+      route.shareToken,
+      () => demoteGroupOwnerToMember(route.shareToken, membershipId),
+      'No se pudo quitar owner.'
     );
   }
 
@@ -627,6 +671,21 @@ function App() {
     );
   }
 
+  if (route.kind === 'sharedGroup' && selectedGroup && state.accessStatus === 'pending') {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center bg-slate-50 px-4 py-6">
+        <section className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-amber-900">
+          <p className="text-sm font-semibold text-amber-700">Cuentas Claras</p>
+          <h1 className="mt-2 text-xl font-semibold">Solicitud enviada</h1>
+          <p className="mt-2 text-sm">Un administrador tiene que aprobar tu acceso.</p>
+          <button type="button" onClick={openHome} className="mt-4 font-semibold text-amber-950">
+            Volver al inicio
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   if (route.kind === 'sharedGroup' && state.accessStatus === 'revoked') {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center bg-slate-50 px-4 py-6">
@@ -650,6 +709,7 @@ function App() {
             expenses={state.expenses}
             settlementCycles={state.settlementCycles}
             settlementPayments={state.settlementPayments}
+            activityLogs={state.activityLogs ?? []}
             currentMembership={state.currentMembership ?? null}
             members={groupMembers}
             onBack={openHome}
@@ -668,6 +728,10 @@ function App() {
             onChangeIdentity={route.kind === 'sharedGroup' ? handleChangeIdentity : undefined}
             onCreateIdentityParticipant={route.kind === 'sharedGroup' ? handleCreateIdentityParticipant : undefined}
             onRevokeMember={route.kind === 'sharedGroup' ? handleRevokeMember : undefined}
+            onApproveMember={route.kind === 'sharedGroup' ? handleApproveMember : undefined}
+            onRejectMember={route.kind === 'sharedGroup' ? handleRejectMember : undefined}
+            onPromoteMember={route.kind === 'sharedGroup' ? handlePromoteMember : undefined}
+            onDemoteOwner={route.kind === 'sharedGroup' ? handleDemoteOwner : undefined}
             onRegenerateInvite={route.kind === 'sharedGroup' ? handleRegenerateInvite : undefined}
             errorMessage={detailError}
             isSaving={isSaving}

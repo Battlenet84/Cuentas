@@ -80,18 +80,31 @@ export type Profile = {
   updatedAt: string;
 };
 
+export type ActivityLog = {
+  id: string;
+  groupId: string;
+  actorAuthUserId?: string | null;
+  actorParticipantId?: string | null;
+  actorName?: string | null;
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
 export type GroupMembership = {
   id: string;
   groupId: string;
   participantId: string | null;
   authUserId: string;
   role: 'owner' | 'member';
-  status: 'active' | 'revoked';
+  status: 'active' | 'pending' | 'revoked';
   joinedAt: string;
   lastSeenAt: string;
 };
 
-export type GroupDataAccess = 'member' | 'requires_join' | 'revoked';
+export type GroupDataAccess = 'member' | 'requires_join' | 'pending' | 'revoked';
 
 export type AppState = {
   groups: Group[];
@@ -99,6 +112,7 @@ export type AppState = {
   expenses: Expense[];
   settlementCycles: SettlementCycle[];
   settlementPayments: SettlementPayment[];
+  activityLogs?: ActivityLog[];
   memberships?: GroupMembership[];
   currentMembership?: GroupMembership | null;
   accessStatus?: GroupDataAccess;

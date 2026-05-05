@@ -19,6 +19,9 @@ export function ParticipantsManager({
   const [name, setName] = useState('');
   const [alias, setAlias] = useState('');
   const [showInactive, setShowInactive] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editAlias, setEditAlias] = useState('');
   const [error, setError] = useState<string | null>(null);
   const groupParticipants = participants.filter((participant) => participant.groupId === groupId);
   const visibleParticipants = showInactive
@@ -51,11 +54,31 @@ export function ParticipantsManager({
   }
 
   async function handleRemove(participant: Participant) {
-    const hasExpenses = participantIdsWithExpenses.has(participant.id);
     try {
       await onUpdateParticipant({ ...participant, isActive: false });
       setError(null);
-      if (!hasExpenses) return;
+    } catch {
+      setError('No se pudo guardar el participante.');
+    }
+  }
+
+  function startEdit(participant: Participant) {
+    setEditingId(participant.id);
+    setEditName(participant.name);
+    setEditAlias(participant.alias ?? '');
+  }
+
+  async function saveEdit(participant: Participant) {
+    const trimmedName = editName.trim();
+    if (!trimmedName) {
+      setError('El nombre es obligatorio.');
+      return;
+    }
+
+    try {
+      await onUpdateParticipant({ ...participant, name: trimmedName, alias: editAlias.trim() || undefined });
+      setEditingId(null);
+      setError(null);
     } catch {
       setError('No se pudo guardar el participante.');
     }
@@ -75,6 +98,7 @@ export function ParticipantsManager({
           Ver inactivos
         </label>
       </div>
+      <p className="text-sm text-slate-600">Los participantes pueden existir aunque no tengan usuario.</p>
 
       <form onSubmit={handleSubmit} className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3">
         {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
@@ -100,37 +124,78 @@ export function ParticipantsManager({
           <p className="rounded-lg bg-white p-4 text-sm text-slate-500">Agrega participantes para empezar.</p>
         ) : (
           visibleParticipants.map((participant) => (
-            <div
-              key={participant.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3"
-            >
-              <div>
-                <p className="font-medium text-slate-900">{participant.name}</p>
-                <p className="text-sm text-slate-500">
-                  <span>{participant.alias ? `Alias: ${participant.alias}` : 'Sin alias cargado'}</span>
-                  <span> · {participant.isActive ? 'Activo' : 'Inactivo'}</span>
-                </p>
-              </div>
-              {participant.isActive ? (
-                <button
-                  type="button"
-                  onClick={() => handleRemove(participant)}
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
-                >
-                  Desactivar
-                </button>
+            <div key={participant.id} className="rounded-lg border border-slate-200 bg-white p-3">
+              {editingId === participant.id ? (
+                <div className="grid gap-2">
+                  <input
+                    value={editName}
+                    onChange={(event) => setEditName(event.target.value)}
+                    className="min-h-11 rounded-md border border-slate-300 px-3"
+                  />
+                  <input
+                    value={editAlias}
+                    onChange={(event) => setEditAlias(event.target.value)}
+                    className="min-h-11 rounded-md border border-slate-300 px-3"
+                    placeholder="Alias opcional"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void saveEdit(participant)}
+                      className="rounded-md bg-teal-700 px-3 py-2 text-sm font-medium text-white"
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() =>
-                    void Promise.resolve(onUpdateParticipant({ ...participant, isActive: true }))
-                      .then(() => setError(null))
-                      .catch(() => setError('No se pudo guardar el participante.'))
-                  }
-                  className="rounded-md bg-teal-700 px-3 py-2 text-sm font-medium text-white"
-                >
-                  Reactivar
-                </button>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-slate-900">{participant.name}</p>
+                    <p className="text-sm text-slate-500">
+                      {participant.alias ? `Alias: ${participant.alias}` : 'Sin alias cargado'} -{' '}
+                      {participant.isActive ? 'Activo' : 'Inactivo'}
+                      {participantIdsWithExpenses.has(participant.id) ? ' - con movimientos' : ''}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(participant)}
+                      className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                    >
+                      Editar
+                    </button>
+                    {participant.isActive ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleRemove(participant)}
+                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                      >
+                        Desactivar
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void Promise.resolve(onUpdateParticipant({ ...participant, isActive: true }))
+                            .then(() => setError(null))
+                            .catch(() => setError('No se pudo guardar el participante.'))
+                        }
+                        className="rounded-md bg-teal-700 px-3 py-2 text-sm font-medium text-white"
+                      >
+                        Reactivar
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           ))

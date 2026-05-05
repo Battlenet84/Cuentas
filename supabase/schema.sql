@@ -606,6 +606,8 @@ execute function public.notify_group_changed();
 
 NOTIFY pgrst, 'reload schema';
 
+
+
 -- Operational polish: void payments and close periods only when fully settled.
 -- This is intentionally the final definition block.
 
@@ -2612,5 +2614,615 @@ $$;
 grant execute on function void_settlement_payment_by_token(text, uuid) to authenticated;
 grant execute on function group_has_pending_settlements(uuid) to authenticated;
 grant execute on function close_cycle_by_token(text) to authenticated;
+
+NOTIFY pgrst, 'reload schema';
+-- EOF marker for final activity overrides.
+
+create table if not exists public.activity_logs (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references public.groups(id) on delete cascade,
+  actor_auth_user_id uuid null references auth.users(id) on delete set null,
+  actor_participant_id uuid null references public.participants(id) on delete set null,
+  action text not null,
+  entity_type text not null,
+  entity_id uuid null,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists activity_logs_group_created_at_idx on public.activity_logs(group_id, created_at desc);
+create index if not exists activity_logs_actor_auth_user_id_idx on public.activity_logs(actor_auth_user_id);
+alter table public.activity_logs enable row level security;
+
+create or replace function public.log_group_activity(p_group_id uuid, p_action text, p_entity_type text, p_entity_id uuid, p_metadata jsonb default '{}'::jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_actor_participant_id uuid;
+begin
+  if v_user_id is not null then
+    select participant_id into v_actor_participant_id
+    from public.group_memberships
+    where group_id = p_group_id and auth_user_id = v_user_id and status = 'active'
+    limit 1;
+  end if;
+
+  insert into public.activity_logs (group_id, actor_auth_user_id, actor_participant_id, action, entity_type, entity_id, metadata)
+  values (p_group_id, v_user_id, v_actor_participant_id, p_action, p_entity_type, p_entity_id, coalesce(p_metadata, '{}'::jsonb));
+end;
+$$;
+
+create or replace function public.get_group_data(p_share_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group groups%rowtype;
+  v_user_id uuid := auth.uid();
+  v_membership group_memberships%rowtype;
+  v_has_active boolean;
+  v_has_revoked boolean;
+begin
+  if v_user_id is null then raise exception 'Necesitas iniciar sesion.'; end if;
+
+  select * into v_group from groups where share_token = p_share_token and archived_at is null;
+  if not found then raise exception 'No encontramos este grupo.'; end if;
+
+  select exists (select 1 from group_memberships where group_id = v_group.id and auth_user_id = v_user_id and status = 'active') into v_has_active;
+  select exists (select 1 from group_memberships where group_id = v_group.id and auth_user_id = v_user_id and status = 'revoked') into v_has_revoked;
+
+  if not v_has_active and v_has_revoked then
+    return jsonb_build_object('group', to_jsonb(v_group), 'participants', '[]'::jsonb, 'expenses', '[]'::jsonb, 'settlementCycles', '[]'::jsonb, 'settlementPayments', '[]'::jsonb, 'activityLogs', '[]'::jsonb, 'memberships', '[]'::jsonb, 'currentMembership', null, 'claimedParticipantIds', '[]'::jsonb, 'accessStatus', 'revoked', 'accessRevoked', true);
+  end if;
+
+  if not v_has_active then
+    return jsonb_build_object('group', to_jsonb(v_group), 'participants', coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at) from participants p where p.group_id = v_group.id and p.is_active = true), '[]'::jsonb), 'expenses', '[]'::jsonb, 'settlementCycles', '[]'::jsonb, 'settlementPayments', '[]'::jsonb, 'activityLogs', '[]'::jsonb, 'memberships', '[]'::jsonb, 'currentMembership', null, 'claimedParticipantIds', coalesce((select jsonb_agg(m.participant_id) from group_memberships m where m.group_id = v_group.id and m.status = 'active' and m.participant_id is not null), '[]'::jsonb), 'accessStatus', 'requires_join', 'requiresJoin', true);
+  end if;
+
+  select * into v_membership from group_memberships where group_id = v_group.id and auth_user_id = v_user_id and status = 'active' limit 1;
+  update group_memberships set last_seen_at = now() where id = v_membership.id returning * into v_membership;
+
+  return jsonb_build_object(
+    'group', to_jsonb(v_group),
+    'participants', coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at) from participants p where p.group_id = v_group.id), '[]'::jsonb),
+    'expenses', coalesce((select jsonb_agg(public.expense_with_lines_json(e) order by e.date desc, e.created_at desc) from expenses e where e.group_id = v_group.id), '[]'::jsonb),
+    'settlementCycles', coalesce((select jsonb_agg(to_jsonb(sc) order by sc.closed_at desc) from settlement_cycles sc where sc.group_id = v_group.id), '[]'::jsonb),
+    'settlementPayments', coalesce((select jsonb_agg(to_jsonb(sp) order by sp.created_at desc) from settlement_payments sp where sp.group_id = v_group.id), '[]'::jsonb),
+    'activityLogs', coalesce((select jsonb_agg(to_jsonb(activity_rows) order by activity_rows.created_at desc) from (select al.id, al.group_id, al.actor_auth_user_id, al.actor_participant_id, p.name as "actorName", al.action, al.entity_type, al.entity_id, al.metadata, al.created_at from public.activity_logs al left join public.participants p on p.id = al.actor_participant_id where al.group_id = v_group.id order by al.created_at desc limit 100) activity_rows), '[]'::jsonb),
+    'memberships', coalesce((select jsonb_agg(to_jsonb(m) order by m.joined_at) from group_memberships m where m.group_id = v_group.id), '[]'::jsonb),
+    'currentMembership', to_jsonb(v_membership),
+    'claimedParticipantIds', coalesce((select jsonb_agg(m.participant_id) from group_memberships m where m.group_id = v_group.id and m.status = 'active' and m.participant_id is not null), '[]'::jsonb),
+    'accessStatus', 'member'
+  );
+end;
+$$;
+
+create or replace function public.create_participant_by_token(p_share_token text, p_name text, p_alias text default null)
+returns participants language plpgsql security definer set search_path = public as $$
+declare v_group_id uuid := public.require_active_member_group_id(p_share_token); v_participant participants%rowtype;
+begin
+  if nullif(trim(p_name), '') is null then raise exception 'El nombre del participante es obligatorio.'; end if;
+  insert into participants (group_id, name, alias) values (v_group_id, trim(p_name), nullif(trim(p_alias), '')) returning * into v_participant;
+  perform public.log_group_activity(v_group_id, 'participant_created', 'participant', v_participant.id, jsonb_build_object('name', v_participant.name));
+  return v_participant;
+end;
+$$;
+
+create or replace function public.update_participant_by_token(p_share_token text, p_participant_id uuid, p_name text, p_alias text, p_is_active boolean)
+returns participants language plpgsql security definer set search_path = public as $$
+declare v_group_id uuid := public.require_active_member_group_id(p_share_token); v_participant participants%rowtype;
+begin
+  if nullif(trim(p_name), '') is null then raise exception 'El nombre del participante es obligatorio.'; end if;
+  update participants set name = trim(p_name), alias = nullif(trim(p_alias), ''), is_active = p_is_active where id = p_participant_id and group_id = v_group_id returning * into v_participant;
+  if not found then raise exception 'No encontramos ese participante en este grupo.'; end if;
+  perform public.log_group_activity(v_group_id, 'participant_updated', 'participant', v_participant.id, jsonb_build_object('name', v_participant.name));
+  return v_participant;
+end;
+$$;
+
+create or replace function public.create_expense_by_token(p_share_token text, p_title text, p_amount_cents integer, p_date date, p_payers jsonb, p_splits jsonb, p_payer_mode text, p_split_mode text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_group_id uuid := public.require_active_member_group_id(p_share_token); v_expense expenses%rowtype; v_first_payer uuid; v_split_ids uuid[];
+begin
+  if nullif(trim(p_title), '') is null then raise exception 'El nombre del gasto es obligatorio.'; end if;
+  perform public.validate_expense_payload(v_group_id, p_amount_cents, p_payers, p_splits, p_payer_mode, p_split_mode);
+  select (item->>'participantId')::uuid into v_first_payer from jsonb_array_elements(p_payers) item limit 1;
+  select array_agg((item->>'participantId')::uuid) into v_split_ids from jsonb_array_elements(p_splits) item;
+  insert into expenses (group_id, title, amount_cents, paid_by_participant_id, split_participant_ids, date, payer_mode, split_mode) values (v_group_id, trim(p_title), p_amount_cents, v_first_payer, v_split_ids, p_date, p_payer_mode, p_split_mode) returning * into v_expense;
+  insert into expense_payers (expense_id, participant_id, amount_cents) select v_expense.id, (item->>'participantId')::uuid, (item->>'amountCents')::integer from jsonb_array_elements(p_payers) item;
+  insert into expense_splits (expense_id, participant_id, amount_cents) select v_expense.id, (item->>'participantId')::uuid, (item->>'amountCents')::integer from jsonb_array_elements(p_splits) item;
+  perform public.log_group_activity(v_group_id, 'expense_created', 'expense', v_expense.id, jsonb_build_object('title', v_expense.title, 'amount_cents', v_expense.amount_cents));
+  return public.expense_with_lines_json(v_expense);
+end;
+$$;
+
+create or replace function public.update_expense_by_token(p_share_token text, p_expense_id uuid, p_title text, p_amount_cents integer, p_date date, p_payers jsonb, p_splits jsonb, p_payer_mode text, p_split_mode text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_group_id uuid := public.require_active_member_group_id(p_share_token); v_expense expenses%rowtype; v_first_payer uuid; v_split_ids uuid[];
+begin
+  if nullif(trim(p_title), '') is null then raise exception 'El nombre del gasto es obligatorio.'; end if;
+  perform public.validate_expense_payload(v_group_id, p_amount_cents, p_payers, p_splits, p_payer_mode, p_split_mode);
+  if not exists (select 1 from expenses where id = p_expense_id and group_id = v_group_id) then raise exception 'No encontramos ese gasto en este grupo.'; end if;
+  select (item->>'participantId')::uuid into v_first_payer from jsonb_array_elements(p_payers) item limit 1;
+  select array_agg((item->>'participantId')::uuid) into v_split_ids from jsonb_array_elements(p_splits) item;
+  update expenses set title = trim(p_title), amount_cents = p_amount_cents, paid_by_participant_id = v_first_payer, split_participant_ids = v_split_ids, date = p_date, payer_mode = p_payer_mode, split_mode = p_split_mode where id = p_expense_id and group_id = v_group_id returning * into v_expense;
+  delete from expense_payers where expense_id = v_expense.id;
+  delete from expense_splits where expense_id = v_expense.id;
+  insert into expense_payers (expense_id, participant_id, amount_cents) select v_expense.id, (item->>'participantId')::uuid, (item->>'amountCents')::integer from jsonb_array_elements(p_payers) item;
+  insert into expense_splits (expense_id, participant_id, amount_cents) select v_expense.id, (item->>'participantId')::uuid, (item->>'amountCents')::integer from jsonb_array_elements(p_splits) item;
+  perform public.log_group_activity(v_group_id, 'expense_updated', 'expense', v_expense.id, jsonb_build_object('title', v_expense.title, 'amount_cents', v_expense.amount_cents));
+  return public.expense_with_lines_json(v_expense);
+end;
+$$;
+
+create or replace function public.delete_expense_by_token(p_share_token text, p_expense_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_group_id uuid := public.require_active_member_group_id(p_share_token); v_title text;
+begin
+  select title into v_title from public.expenses where id = p_expense_id and group_id = v_group_id;
+  if not found then raise exception 'No encontramos ese gasto en este grupo.'; end if;
+  delete from expenses where id = p_expense_id and group_id = v_group_id;
+  perform public.log_group_activity(v_group_id, 'expense_deleted', 'expense', p_expense_id, jsonb_build_object('title', v_title));
+end;
+$$;
+
+create or replace function public.create_settlement_payment_by_token(p_share_token text, p_from_participant_id uuid, p_to_participant_id uuid, p_amount_cents integer)
+returns settlement_payments language plpgsql security definer set search_path = public as $$
+declare v_group_id uuid := public.require_active_member_group_id(p_share_token); v_user_id uuid := auth.uid(); v_payment settlement_payments%rowtype;
+begin
+  if v_user_id is null then raise exception 'Necesitas iniciar sesion.'; end if;
+  if p_amount_cents is null or p_amount_cents <= 0 then raise exception 'El monto tiene que ser mayor a 0.'; end if;
+  if p_from_participant_id = p_to_participant_id then raise exception 'El pago necesita dos participantes distintos.'; end if;
+  if not exists (select 1 from participants where id = p_from_participant_id and group_id = v_group_id) then raise exception 'Quien paga no pertenece a este grupo.'; end if;
+  if not exists (select 1 from participants where id = p_to_participant_id and group_id = v_group_id) then raise exception 'Quien recibe no pertenece a este grupo.'; end if;
+  insert into settlement_payments (group_id, from_participant_id, to_participant_id, amount_cents, created_by_auth_user_id) values (v_group_id, p_from_participant_id, p_to_participant_id, p_amount_cents, v_user_id) returning * into v_payment;
+  perform public.log_group_activity(v_group_id, 'payment_created', 'settlement_payment', v_payment.id, jsonb_build_object('from_participant_id', p_from_participant_id, 'to_participant_id', p_to_participant_id, 'amount_cents', p_amount_cents));
+  return v_payment;
+end;
+$$;
+
+create or replace function public.void_settlement_payment_by_token(p_share_token text, p_payment_id uuid)
+returns settlement_payments language plpgsql security definer set search_path = public as $$
+declare v_group_id uuid := public.require_active_member_group_id(p_share_token); v_payment settlement_payments%rowtype;
+begin
+  update settlement_payments set voided_at = now() where id = p_payment_id and group_id = v_group_id and voided_at is null returning * into v_payment;
+  if not found then raise exception 'No se pudo anular el pago.'; end if;
+  perform public.log_group_activity(v_group_id, 'payment_voided', 'settlement_payment', v_payment.id, jsonb_build_object('amount_cents', v_payment.amount_cents));
+  return v_payment;
+end;
+$$;
+
+create or replace function public.close_cycle_by_token(p_share_token text)
+returns settlement_cycles language plpgsql security definer set search_path = public as $$
+declare v_group_id uuid := public.require_active_member_group_id(p_share_token); v_cycle settlement_cycles%rowtype;
+begin
+  if not exists (select 1 from expenses where group_id = v_group_id and settlement_cycle_id is null) then raise exception 'No hay gastos abiertos para cerrar.'; end if;
+  if public.group_has_pending_settlements(v_group_id) then raise exception 'Para cerrar el periodo, primero salda las deudas pendientes.'; end if;
+  insert into settlement_cycles (group_id, title) values (v_group_id, 'Cierre del ' || to_char((now() at time zone 'America/Argentina/Buenos_Aires')::date, 'DD/MM/YYYY')) returning * into v_cycle;
+  update expenses set settlement_cycle_id = v_cycle.id where group_id = v_group_id and settlement_cycle_id is null;
+  update settlement_payments set settlement_cycle_id = v_cycle.id where group_id = v_group_id and voided_at is null and settlement_cycle_id is null;
+  perform public.log_group_activity(v_group_id, 'period_closed', 'settlement_cycle', v_cycle.id, '{}'::jsonb);
+  return v_cycle;
+end;
+$$;
+
+create or replace function public.revoke_group_member_by_token(p_share_token text, p_membership_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_group_id uuid; v_user_id uuid := auth.uid(); v_target group_memberships%rowtype; v_active_owner_count integer;
+begin
+  if v_user_id is null then raise exception 'Necesitas iniciar sesion.'; end if;
+  select id into v_group_id from groups where share_token = p_share_token and archived_at is null;
+  if v_group_id is null then raise exception 'No encontramos este grupo.'; end if;
+  if not exists (select 1 from group_memberships where group_id = v_group_id and auth_user_id = v_user_id and status = 'active' and role = 'owner') then raise exception 'Solo el owner puede revocar miembros.'; end if;
+  select * into v_target from group_memberships where id = p_membership_id and group_id = v_group_id;
+  if not found then raise exception 'No encontramos ese miembro.'; end if;
+  if v_target.auth_user_id = v_user_id then raise exception 'No podes revocarte a vos mismo.'; end if;
+  select count(*) into v_active_owner_count from group_memberships where group_id = v_group_id and status = 'active' and role = 'owner';
+  if v_target.role = 'owner' and v_active_owner_count <= 1 then raise exception 'No podes revocar al unico owner activo.'; end if;
+  update group_memberships set status = 'revoked' where id = p_membership_id and group_id = v_group_id;
+  perform public.log_group_activity(v_group_id, 'member_revoked', 'membership', p_membership_id, '{}'::jsonb);
+end;
+$$;
+
+create or replace function public.regenerate_group_invite_token(p_share_token text, p_new_share_token text)
+returns groups language plpgsql security definer set search_path = public as $$
+declare v_group groups%rowtype; v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Necesitas iniciar sesion.'; end if;
+  select * into v_group from groups where share_token = p_share_token and archived_at is null;
+  if not found then raise exception 'No encontramos este grupo.'; end if;
+  if not exists (select 1 from group_memberships where group_id = v_group.id and auth_user_id = v_user_id and status = 'active' and role = 'owner') then raise exception 'Solo el owner puede regenerar el link.'; end if;
+  if nullif(trim(p_new_share_token), '') is null then raise exception 'El token nuevo es obligatorio.'; end if;
+  update groups set share_token = trim(p_new_share_token) where id = v_group.id returning * into v_group;
+  perform public.log_group_activity(v_group.id, 'invite_regenerated', 'group', v_group.id, '{}'::jsonb);
+  return v_group;
+end;
+$$;
+
+create or replace function public.notify_group_changed()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_group_id uuid; v_share_token text;
+begin
+  if TG_TABLE_NAME = 'groups' then
+    v_group_id := coalesce(NEW.id, OLD.id);
+    v_share_token := coalesce(NEW.share_token, OLD.share_token);
+  elsif TG_TABLE_NAME in ('expense_payers', 'expense_splits') then
+    select e.group_id into v_group_id from public.expenses e where e.id = coalesce(NEW.expense_id, OLD.expense_id);
+    select share_token into v_share_token from public.groups where id = v_group_id;
+  else
+    v_group_id := coalesce(NEW.group_id, OLD.group_id);
+    select share_token into v_share_token from public.groups where id = v_group_id;
+  end if;
+  if v_share_token is not null then perform realtime.send(jsonb_build_object('table', TG_TABLE_NAME, 'operation', TG_OP, 'at', now()), 'group_changed', 'group:' || v_share_token, false); end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists on_activity_logs_changed on public.activity_logs;
+create trigger on_activity_logs_changed after insert or update or delete on public.activity_logs for each row execute function public.notify_group_changed();
+
+grant execute on function get_group_data(text) to authenticated;
+grant execute on function create_participant_by_token(text, text, text) to authenticated;
+grant execute on function update_participant_by_token(text, uuid, text, text, boolean) to authenticated;
+grant execute on function create_expense_by_token(text, text, integer, date, jsonb, jsonb, text, text) to authenticated;
+grant execute on function update_expense_by_token(text, uuid, text, integer, date, jsonb, jsonb, text, text) to authenticated;
+grant execute on function delete_expense_by_token(text, uuid) to authenticated;
+grant execute on function create_settlement_payment_by_token(text, uuid, uuid, integer) to authenticated;
+grant execute on function void_settlement_payment_by_token(text, uuid) to authenticated;
+grant execute on function close_cycle_by_token(text) to authenticated;
+grant execute on function revoke_group_member_by_token(text, uuid) to authenticated;
+grant execute on function regenerate_group_invite_token(text, text) to authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- EOF replay: final admin/trust overrides must run after historical blocks.
+-- Final admin/trust iteration overrides: pending approvals, multiple owners, activity.
+
+do $$
+declare
+  v_constraint_name text;
+begin
+  for v_constraint_name in
+    select c.conname
+    from pg_constraint c
+    join pg_class t on t.oid = c.conrelid
+    join pg_namespace n on n.oid = t.relnamespace
+    where n.nspname = 'public'
+      and t.relname = 'group_memberships'
+      and c.contype = 'c'
+      and pg_get_constraintdef(c.oid) like '%status%'
+  loop
+    execute format('alter table public.group_memberships drop constraint if exists %I', v_constraint_name);
+  end loop;
+end $$;
+
+alter table public.group_memberships
+  add constraint group_memberships_status_check check (status in ('active', 'pending', 'revoked'));
+
+create index if not exists group_memberships_pending_participant_group_idx
+  on public.group_memberships (group_id, participant_id)
+  where status = 'pending' and participant_id is not null;
+
+create or replace function public.require_active_owner_group_id(p_share_token text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid;
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then raise exception 'Necesitas iniciar sesion.'; end if;
+
+  select g.id into v_group_id
+  from public.groups g
+  join public.group_memberships m on m.group_id = g.id
+  where g.share_token = p_share_token
+    and g.archived_at is null
+    and m.auth_user_id = v_user_id
+    and m.status = 'active'
+    and m.role = 'owner'
+  limit 1;
+
+  if v_group_id is null then raise exception 'Solo un owner activo puede hacer esto.'; end if;
+  return v_group_id;
+end;
+$$;
+
+create or replace function public.get_group_data(p_share_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group groups%rowtype;
+  v_user_id uuid := auth.uid();
+  v_membership group_memberships%rowtype;
+begin
+  if v_user_id is null then raise exception 'Necesitas iniciar sesion.'; end if;
+
+  select * into v_group from groups where share_token = p_share_token and archived_at is null;
+  if not found then raise exception 'No encontramos este grupo.'; end if;
+
+  select * into v_membership
+  from group_memberships
+  where group_id = v_group.id and auth_user_id = v_user_id
+  order by case status when 'active' then 1 when 'pending' then 2 else 3 end
+  limit 1;
+
+  if not found then
+    return jsonb_build_object(
+      'group', to_jsonb(v_group),
+      'participants', coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at) from participants p where p.group_id = v_group.id and p.is_active = true), '[]'::jsonb),
+      'expenses', '[]'::jsonb,
+      'settlementCycles', '[]'::jsonb,
+      'settlementPayments', '[]'::jsonb,
+      'activityLogs', '[]'::jsonb,
+      'memberships', '[]'::jsonb,
+      'currentMembership', null,
+      'claimedParticipantIds', coalesce((select jsonb_agg(m.participant_id) from group_memberships m where m.group_id = v_group.id and m.status in ('active', 'pending') and m.participant_id is not null), '[]'::jsonb),
+      'accessStatus', 'requires_join',
+      'requiresJoin', true
+    );
+  end if;
+
+  if v_membership.status = 'pending' then
+    return jsonb_build_object(
+      'group', to_jsonb(v_group),
+      'participants', '[]'::jsonb,
+      'expenses', '[]'::jsonb,
+      'settlementCycles', '[]'::jsonb,
+      'settlementPayments', '[]'::jsonb,
+      'activityLogs', '[]'::jsonb,
+      'memberships', '[]'::jsonb,
+      'currentMembership', to_jsonb(v_membership),
+      'claimedParticipantIds', '[]'::jsonb,
+      'accessStatus', 'pending'
+    );
+  end if;
+
+  if v_membership.status = 'revoked' then
+    return jsonb_build_object(
+      'group', to_jsonb(v_group),
+      'participants', '[]'::jsonb,
+      'expenses', '[]'::jsonb,
+      'settlementCycles', '[]'::jsonb,
+      'settlementPayments', '[]'::jsonb,
+      'activityLogs', '[]'::jsonb,
+      'memberships', '[]'::jsonb,
+      'currentMembership', to_jsonb(v_membership),
+      'claimedParticipantIds', '[]'::jsonb,
+      'accessStatus', 'revoked',
+      'accessRevoked', true
+    );
+  end if;
+
+  update group_memberships set last_seen_at = now() where id = v_membership.id returning * into v_membership;
+
+  return jsonb_build_object(
+    'group', to_jsonb(v_group),
+    'participants', coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at) from participants p where p.group_id = v_group.id), '[]'::jsonb),
+    'expenses', coalesce((select jsonb_agg(public.expense_with_lines_json(e) order by e.date desc, e.created_at desc) from expenses e where e.group_id = v_group.id), '[]'::jsonb),
+    'settlementCycles', coalesce((select jsonb_agg(to_jsonb(sc) order by sc.closed_at desc) from settlement_cycles sc where sc.group_id = v_group.id), '[]'::jsonb),
+    'settlementPayments', coalesce((select jsonb_agg(to_jsonb(sp) order by sp.created_at desc) from settlement_payments sp where sp.group_id = v_group.id), '[]'::jsonb),
+    'activityLogs', coalesce((select jsonb_agg(to_jsonb(activity_rows) order by activity_rows.created_at desc) from (select al.id, al.group_id, al.actor_auth_user_id, al.actor_participant_id, p.name as "actorName", al.action, al.entity_type, al.entity_id, al.metadata, al.created_at from public.activity_logs al left join public.participants p on p.id = al.actor_participant_id where al.group_id = v_group.id order by al.created_at desc limit 100) activity_rows), '[]'::jsonb),
+    'memberships', case when v_membership.role = 'owner' then coalesce((select jsonb_agg(to_jsonb(m) order by m.joined_at) from group_memberships m where m.group_id = v_group.id), '[]'::jsonb) else '[]'::jsonb end,
+    'currentMembership', to_jsonb(v_membership),
+    'claimedParticipantIds', coalesce((select jsonb_agg(m.participant_id) from group_memberships m where m.group_id = v_group.id and m.status in ('active', 'pending') and m.participant_id is not null), '[]'::jsonb),
+    'accessStatus', 'member'
+  );
+end;
+$$;
+
+create or replace function public.join_group_by_token(
+  p_share_token text,
+  p_participant_id uuid default null,
+  p_new_participant_name text default null,
+  p_new_participant_alias text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid;
+  v_user_id uuid := auth.uid();
+  v_membership group_memberships%rowtype;
+  v_participant participants%rowtype;
+  v_has_active_owner boolean;
+  v_new_status text := 'pending';
+  v_new_role text := 'member';
+begin
+  if v_user_id is null then raise exception 'Necesitas iniciar sesion.'; end if;
+  select id into v_group_id from groups where share_token = p_share_token and archived_at is null;
+  if v_group_id is null then raise exception 'No encontramos este grupo.'; end if;
+
+  select * into v_membership
+  from group_memberships
+  where group_id = v_group_id and auth_user_id = v_user_id
+  order by case status when 'active' then 1 when 'pending' then 2 else 3 end
+  limit 1;
+
+  if found then
+    if v_membership.status = 'revoked' then raise exception 'Tu acceso a este grupo fue revocado.'; end if;
+    if v_membership.participant_id is not null then select * into v_participant from participants where id = v_membership.participant_id; end if;
+    return jsonb_build_object('membership', to_jsonb(v_membership), 'participant', case when v_participant.id is null then null else to_jsonb(v_participant) end);
+  end if;
+
+  select exists (select 1 from group_memberships where group_id = v_group_id and status = 'active' and role = 'owner') into v_has_active_owner;
+  if not v_has_active_owner then
+    v_new_status := 'active';
+    v_new_role := 'owner';
+  end if;
+
+  if p_participant_id is not null then
+    select * into v_participant from participants where id = p_participant_id and group_id = v_group_id and is_active = true;
+    if not found then raise exception 'Ese participante no pertenece al grupo.'; end if;
+    if exists (select 1 from group_memberships where group_id = v_group_id and participant_id = p_participant_id and status in ('active', 'pending')) then
+      raise exception 'Ese participante ya esta asociado o pendiente.';
+    end if;
+  else
+    if nullif(trim(p_new_participant_name), '') is null then raise exception 'El nombre es obligatorio.'; end if;
+    insert into participants (group_id, name, alias)
+    values (v_group_id, trim(p_new_participant_name), nullif(trim(p_new_participant_alias), ''))
+    returning * into v_participant;
+  end if;
+
+  insert into group_memberships (group_id, participant_id, auth_user_id, role, status)
+  values (v_group_id, v_participant.id, v_user_id, v_new_role, v_new_status)
+  returning * into v_membership;
+
+  if v_new_status = 'active' then
+    perform public.log_group_activity(v_group_id, 'member_approved', 'membership', v_membership.id, '{}'::jsonb);
+  end if;
+
+  return jsonb_build_object('membership', to_jsonb(v_membership), 'participant', to_jsonb(v_participant));
+end;
+$$;
+
+create or replace function public.get_group_members_by_token(p_share_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_owner_group_id(p_share_token);
+begin
+  return coalesce(
+    (
+      select jsonb_agg(to_jsonb(rows) order by rows.status, rows.joined_at)
+      from (
+        select
+          m.*,
+          p.name as participant_name,
+          p.alias as participant_alias,
+          p.name as requested_name
+        from group_memberships m
+        left join participants p on p.id = m.participant_id
+        where m.group_id = v_group_id
+      ) rows
+    ),
+    '[]'::jsonb
+  );
+end;
+$$;
+
+create or replace function public.approve_group_member_by_token(p_share_token text, p_membership_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_owner_group_id(p_share_token);
+begin
+  update group_memberships
+  set status = 'active'
+  where id = p_membership_id and group_id = v_group_id and status = 'pending';
+  if not found then raise exception 'No encontramos esa solicitud pendiente.'; end if;
+  perform public.log_group_activity(v_group_id, 'member_approved', 'membership', p_membership_id, '{}'::jsonb);
+end;
+$$;
+
+create or replace function public.reject_group_member_by_token(p_share_token text, p_membership_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_owner_group_id(p_share_token);
+begin
+  update group_memberships
+  set status = 'revoked'
+  where id = p_membership_id and group_id = v_group_id and status = 'pending';
+  if not found then raise exception 'No encontramos esa solicitud pendiente.'; end if;
+  perform public.log_group_activity(v_group_id, 'member_rejected', 'membership', p_membership_id, '{}'::jsonb);
+end;
+$$;
+
+create or replace function public.promote_group_member_to_owner(p_share_token text, p_membership_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_owner_group_id(p_share_token);
+begin
+  update group_memberships
+  set role = 'owner'
+  where id = p_membership_id and group_id = v_group_id and status = 'active' and role = 'member';
+  if not found then raise exception 'No encontramos ese miembro activo.'; end if;
+  perform public.log_group_activity(v_group_id, 'member_promoted_to_owner', 'membership', p_membership_id, '{}'::jsonb);
+end;
+$$;
+
+create or replace function public.demote_group_owner_to_member(p_share_token text, p_membership_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_owner_group_id(p_share_token);
+  v_active_owner_count integer;
+begin
+  select count(*) into v_active_owner_count from group_memberships where group_id = v_group_id and status = 'active' and role = 'owner';
+  if v_active_owner_count <= 1 then raise exception 'No podes quitar owner al ultimo owner activo.'; end if;
+
+  update group_memberships
+  set role = 'member'
+  where id = p_membership_id and group_id = v_group_id and status = 'active' and role = 'owner';
+  if not found then raise exception 'No encontramos ese owner activo.'; end if;
+  perform public.log_group_activity(v_group_id, 'member_demoted_to_member', 'membership', p_membership_id, '{}'::jsonb);
+end;
+$$;
+
+create or replace function public.revoke_group_member_by_token(p_share_token text, p_membership_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_owner_group_id(p_share_token);
+  v_user_id uuid := auth.uid();
+  v_target group_memberships%rowtype;
+  v_active_owner_count integer;
+begin
+  select * into v_target from group_memberships where id = p_membership_id and group_id = v_group_id;
+  if not found then raise exception 'No encontramos ese miembro.'; end if;
+  if v_target.auth_user_id = v_user_id then raise exception 'No podes revocarte a vos mismo.'; end if;
+
+  select count(*) into v_active_owner_count from group_memberships where group_id = v_group_id and status = 'active' and role = 'owner';
+  if v_target.status = 'active' and v_target.role = 'owner' and v_active_owner_count <= 1 then
+    raise exception 'No podes revocar al unico owner activo.';
+  end if;
+
+  update group_memberships set status = 'revoked' where id = p_membership_id and group_id = v_group_id;
+  perform public.log_group_activity(v_group_id, 'member_revoked', 'membership', p_membership_id, '{}'::jsonb);
+end;
+$$;
+
+grant execute on function require_active_owner_group_id(text) to authenticated;
+grant execute on function get_group_data(text) to authenticated;
+grant execute on function join_group_by_token(text, uuid, text, text) to authenticated;
+grant execute on function get_group_members_by_token(text) to authenticated;
+grant execute on function approve_group_member_by_token(text, uuid) to authenticated;
+grant execute on function reject_group_member_by_token(text, uuid) to authenticated;
+grant execute on function promote_group_member_to_owner(text, uuid) to authenticated;
+grant execute on function demote_group_owner_to_member(text, uuid) to authenticated;
+grant execute on function revoke_group_member_by_token(text, uuid) to authenticated;
 
 NOTIFY pgrst, 'reload schema';

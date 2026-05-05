@@ -7,7 +7,8 @@ export const emptyState: AppState = {
   participants: [],
   expenses: [],
   settlementCycles: [],
-  settlementPayments: []
+  settlementPayments: [],
+  activityLogs: []
 };
 
 export function loadState(): AppState {
@@ -23,7 +24,8 @@ export function loadState(): AppState {
       participants: Array.isArray(parsed.participants) ? parsed.participants : [],
       expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
       settlementCycles: Array.isArray(parsed.settlementCycles) ? parsed.settlementCycles : [],
-      settlementPayments: Array.isArray(parsed.settlementPayments) ? parsed.settlementPayments : []
+      settlementPayments: Array.isArray(parsed.settlementPayments) ? parsed.settlementPayments : [],
+      activityLogs: Array.isArray(parsed.activityLogs) ? parsed.activityLogs : []
     };
   } catch (error) {
     console.warn('No se pudo cargar el estado guardado.', error);

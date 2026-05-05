@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Expense, Group, GroupMembership, Participant, Settlement, SettlementCycle, SettlementPayment } from '../types';
+import type { ActivityLog, Expense, Group, GroupMembership, Participant, Settlement, SettlementCycle, SettlementPayment } from '../types';
 import type { GroupMemberView } from '../data/supabaseStorage';
 import type { RealtimeStatus } from '../data/realtime';
 import {
@@ -26,6 +26,7 @@ type GroupDetailProps = {
   expenses: Expense[];
   settlementCycles: SettlementCycle[];
   settlementPayments: SettlementPayment[];
+  activityLogs: ActivityLog[];
   currentMembership?: GroupMembership | null;
   members?: GroupMemberView[];
   onBack: () => void;
@@ -44,6 +45,10 @@ type GroupDetailProps = {
   onChangeIdentity?: (participantId: string) => Promise<void>;
   onCreateIdentityParticipant?: (name: string, alias?: string) => Promise<void>;
   onRevokeMember?: (membershipId: string) => Promise<void>;
+  onApproveMember?: (membershipId: string) => Promise<void>;
+  onRejectMember?: (membershipId: string) => Promise<void>;
+  onPromoteMember?: (membershipId: string) => Promise<void>;
+  onDemoteOwner?: (membershipId: string) => Promise<void>;
   onRegenerateInvite?: () => Promise<void>;
   errorMessage?: string | null;
   isSaving?: boolean;
@@ -58,6 +63,7 @@ export function GroupDetail({
   expenses,
   settlementCycles,
   settlementPayments,
+  activityLogs,
   currentMembership,
   members = [],
   onBack,
@@ -76,6 +82,10 @@ export function GroupDetail({
   onChangeIdentity,
   onCreateIdentityParticipant,
   onRevokeMember,
+  onApproveMember,
+  onRejectMember,
+  onPromoteMember,
+  onDemoteOwner,
   onRegenerateInvite,
   errorMessage,
   isSaving = false,
@@ -196,6 +206,11 @@ export function GroupDetail({
     if (confirmed) await onCloseOpenExpenses();
   }
 
+  async function handleRegenerateInvite() {
+    const confirmed = window.confirm('Los links anteriores dejaran de servir para nuevas personas. Los miembros actuales mantienen acceso.');
+    if (confirmed) await onRegenerateInvite?.();
+  }
+
   async function handleVoidPayment(paymentId: string) {
     const confirmed = window.confirm('¿Queres anular este pago registrado?');
     if (confirmed) await onVoidSettlementPayment?.(paymentId);
@@ -224,12 +239,16 @@ export function GroupDetail({
     ) : null;
 
   const membersManager =
-    isOwner && onRevokeMember && onRegenerateInvite ? (
+    onRevokeMember ? (
       <MembersManager
         members={members}
         currentMembership={currentMembership ?? null}
+        isOwner={isOwner}
         onRevokeMember={onRevokeMember}
-        onRegenerateInvite={onRegenerateInvite}
+        onApproveMember={onApproveMember}
+        onRejectMember={onRejectMember}
+        onPromoteMember={onPromoteMember}
+        onDemoteOwner={onDemoteOwner}
       />
     ) : null;
 
@@ -269,6 +288,7 @@ export function GroupDetail({
           expenses={groupExpenses}
           settlementPayments={settlementPayments.filter((payment) => payment.groupId === group.id)}
           settlementCycles={groupCycles}
+          activityLogs={activityLogs.filter((log) => log.groupId === group.id)}
           participants={groupParticipants}
           onEditExpense={openEditExpensePanel}
           onDeleteExpense={onDeleteExpense}
@@ -295,7 +315,9 @@ export function GroupDetail({
 
     return (
       <div className="space-y-5">
-        <section className="grid gap-2 rounded-lg border border-slate-200 bg-white p-4">
+        <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="font-semibold text-slate-900">Grupo</h2>
+          <p className="text-sm text-slate-600">{group.name}</p>
           <button
             type="button"
             onClick={handleCopyGroupLink}
@@ -303,6 +325,38 @@ export function GroupDetail({
           >
             Copiar link del grupo
           </button>
+          <button
+            type="button"
+            onClick={onBack}
+            className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
+          >
+            Volver a Mis grupos
+          </button>
+        </section>
+
+        <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="font-semibold text-slate-900">Invitacion</h2>
+          <button
+            type="button"
+            onClick={handleCopyGroupLink}
+            className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
+          >
+            Copiar link de invitacion
+          </button>
+          {isOwner && onRegenerateInvite ? (
+            <button
+              type="button"
+              onClick={handleRegenerateInvite}
+              className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
+            >
+              Regenerar link de invitacion
+            </button>
+          ) : null}
+          <p className="text-sm text-slate-600">Las personas con link deberan solicitar acceso.</p>
+        </section>
+
+        <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="font-semibold text-slate-900">Periodo</h2>
           <button
             type="button"
             onClick={handleClose}
@@ -314,13 +368,10 @@ export function GroupDetail({
           {pendingSettlementCents > 0 ? (
             <p className="text-sm text-slate-600">Solo podes cerrar el periodo cuando el saldo este en cero.</p>
           ) : null}
-          <button
-            type="button"
-            onClick={onBack}
-            className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
-          >
-            Volver a Mis grupos
-          </button>
+        </section>
+
+        <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="font-semibold text-slate-900">Cuenta</h2>
           {onSignOut ? (
             <button
               type="button"

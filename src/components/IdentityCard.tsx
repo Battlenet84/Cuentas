@@ -45,6 +45,7 @@ export function IdentityCard({ membership, participants, onChangeIdentity, onCre
           <p className="mt-1 text-sm text-slate-600">
             {currentParticipant ? `Entraste como ${currentParticipant.name}` : 'Todavía no elegiste quién sos en este grupo.'}
           </p>
+          {currentParticipant?.alias ? <p className="mt-1 text-sm text-slate-500">Alias: {currentParticipant.alias}</p> : null}
         </div>
         <button type="button" onClick={() => setIsEditing((value) => !value)} className="text-sm font-semibold text-teal-800">
           Cambiar

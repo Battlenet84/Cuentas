@@ -1,4 +1,5 @@
 import type {
+  ActivityLog,
   AppState,
   Expense,
   ExpensePayer,
@@ -77,13 +78,27 @@ type RemoteSettlementPayment = {
   voided_at: string | null;
 };
 
+type RemoteActivityLog = {
+  id: string;
+  group_id: string;
+  actor_auth_user_id: string | null;
+  actor_participant_id: string | null;
+  actorName?: string | null;
+  actor_name?: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
 type RemoteMembership = {
   id: string;
   group_id: string;
   participant_id: string | null;
   auth_user_id: string;
   role: 'owner' | 'member';
-  status: 'active' | 'revoked';
+  status: 'active' | 'pending' | 'revoked';
   joined_at: string;
   last_seen_at: string;
 };
@@ -99,11 +114,13 @@ type RemoteProfile = {
 export type GroupMemberView = GroupMembership & {
   participantName: string | null;
   participantAlias: string | null;
+  requestedName?: string | null;
 };
 
 type RemoteMemberView = RemoteMembership & {
   participant_name: string | null;
   participant_alias: string | null;
+  requested_name?: string | null;
 };
 
 type RemoteGroupData = {
@@ -112,6 +129,7 @@ type RemoteGroupData = {
   expenses?: RemoteExpense[];
   settlementCycles?: RemoteSettlementCycle[];
   settlementPayments?: RemoteSettlementPayment[];
+  activityLogs?: RemoteActivityLog[];
   memberships?: RemoteMembership[];
   currentMembership?: RemoteMembership | null;
   accessStatus?: GroupDataAccess;
@@ -204,6 +222,21 @@ function mapSettlementPayment(payment: RemoteSettlementPayment): SettlementPayme
   };
 }
 
+function mapActivityLog(log: RemoteActivityLog): ActivityLog {
+  return {
+    id: log.id,
+    groupId: log.group_id,
+    actorAuthUserId: log.actor_auth_user_id,
+    actorParticipantId: log.actor_participant_id,
+    actorName: log.actorName ?? log.actor_name ?? null,
+    action: log.action,
+    entityType: log.entity_type,
+    entityId: log.entity_id,
+    metadata: log.metadata ?? {},
+    createdAt: log.created_at
+  };
+}
+
 function mapMembership(membership: RemoteMembership): GroupMembership {
   return {
     id: membership.id,
@@ -231,7 +264,8 @@ function mapMemberView(member: RemoteMemberView): GroupMemberView {
   return {
     ...mapMembership(member),
     participantName: member.participant_name,
-    participantAlias: member.participant_alias
+    participantAlias: member.participant_alias,
+    requestedName: member.requested_name ?? null
   };
 }
 
@@ -242,6 +276,7 @@ function emptyRemoteState(): AppState {
     expenses: [],
     settlementCycles: [],
     settlementPayments: [],
+    activityLogs: [],
     memberships: [],
     currentMembership: null,
     accessStatus: 'requires_join',
@@ -259,6 +294,7 @@ function mapGroupData(data: RemoteGroupData): AppState {
     expenses: (data.expenses ?? []).map(mapExpense),
     settlementCycles: (data.settlementCycles ?? []).map(mapSettlementCycle),
     settlementPayments: (data.settlementPayments ?? []).map(mapSettlementPayment),
+    activityLogs: (data.activityLogs ?? []).map(mapActivityLog),
     memberships: (data.memberships ?? []).map(mapMembership),
     currentMembership: data.currentMembership ? mapMembership(data.currentMembership) : null,
     accessStatus,
@@ -482,6 +518,46 @@ export async function revokeGroupMember(shareToken: string, membershipId: string
   });
 
   if (error) throw new Error(error.message || 'No se pudo revocar el miembro.');
+}
+
+export async function approveGroupMember(shareToken: string, membershipId: string): Promise<void> {
+  const client = getSupabaseClient();
+  const { error } = await client.rpc('approve_group_member_by_token', {
+    p_share_token: shareToken,
+    p_membership_id: membershipId
+  });
+
+  if (error) throw new Error(error.message || 'No se pudo aprobar el miembro.');
+}
+
+export async function rejectGroupMember(shareToken: string, membershipId: string): Promise<void> {
+  const client = getSupabaseClient();
+  const { error } = await client.rpc('reject_group_member_by_token', {
+    p_share_token: shareToken,
+    p_membership_id: membershipId
+  });
+
+  if (error) throw new Error(error.message || 'No se pudo rechazar el miembro.');
+}
+
+export async function promoteGroupMemberToOwner(shareToken: string, membershipId: string): Promise<void> {
+  const client = getSupabaseClient();
+  const { error } = await client.rpc('promote_group_member_to_owner', {
+    p_share_token: shareToken,
+    p_membership_id: membershipId
+  });
+
+  if (error) throw new Error(error.message || 'No se pudo hacer owner al miembro.');
+}
+
+export async function demoteGroupOwnerToMember(shareToken: string, membershipId: string): Promise<void> {
+  const client = getSupabaseClient();
+  const { error } = await client.rpc('demote_group_owner_to_member', {
+    p_share_token: shareToken,
+    p_membership_id: membershipId
+  });
+
+  if (error) throw new Error(error.message || 'No se pudo quitar owner.');
 }
 
 export async function regenerateGroupInviteToken(shareToken: string): Promise<Group> {

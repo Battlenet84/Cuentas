@@ -169,11 +169,54 @@ Al cerrar:
 
 Los pagos anulados no se archivan como pagos activos ni afectan balances.
 
+En Movimientos > Cierres, cada cierre muestra cantidad de gastos y pagos incluidos. El detalle abre una hoja con gastos, pagos y totales del periodo cerrado.
+
 ## Tiempo real
 
 Supabase Realtime Broadcast solo avisa cambios al topic `group:<shareToken>`.
 
 El WebSocket no manda gastos, nombres, montos ni participantes. La app recibe `group_changed` y recarga por RPC con `loadGroupByShareToken(shareToken)`.
+
+## Actividad del grupo
+
+La app registra actividad basica del grupo para dar transparencia sobre quien hizo cada cambio importante. Se ve en Movimientos > Actividad.
+
+Acciones registradas:
+- gastos creados, editados y eliminados;
+- pagos registrados y anulados;
+- cierres de periodo;
+- participantes creados y editados;
+- miembros revocados;
+- miembros aprobados, rechazados y cambios de owner;
+- link de invitacion regenerado.
+
+Este registro ayuda a entender que paso en el grupo, pero no es una auditoria legal ni irreversible.
+
+## Personas y ajustes
+
+Personas esta separado en bloques:
+- Mi identidad: muestra con que participante entraste y su alias.
+- Participantes: personas del grupo, tengan o no usuario.
+- Miembros con acceso: usuarios con membresia activa y rol `owner` o `member`.
+- Solicitudes pendientes: visible para owners.
+- Accesos revocados: visible para owners.
+- Posibles duplicados: alerta si datos viejos tienen dos accesos activos para el mismo participante.
+
+Ajustes queda solo para grupo, invitacion, periodo y cuenta. La administracion de miembros vive en Personas.
+
+## Invitaciones y roles
+
+Los links de grupo ahora sirven para solicitar acceso, no para entrar directo. Si ya existe al menos un owner activo, una persona nueva queda `pending` hasta que un owner apruebe la solicitud. Si un grupo legacy no tiene ningun owner activo, el primer ingreso queda como owner activo para recuperar administracion.
+
+Roles:
+- `owner`: puede aprobar, rechazar, revocar, regenerar link, cerrar periodo y cambiar roles.
+- `member`: puede usar el grupo cuando su membresia esta activa.
+
+Puede haber multiples owners. La app y las RPC no permiten quitar ni revocar al ultimo owner activo.
+
+## Detalle de gasto
+
+En Movimientos, cada gasto tiene detalle con total, fecha, pagadores, division y acciones de editar/eliminar. No cambia la logica de calculo ni de guardado.
 
 ## Diagnostico antes de indices unicos
 
@@ -206,9 +249,6 @@ No se usa `service_role` en frontend. No hay secrets en el codigo. RLS queda act
 - Magic links.
 - Confirmacion de email.
 - Porcentajes en divisiones.
-- Anular pagos registrados.
 - Revisar Cerrar periodo con pagos individuales y gastos flexibles.
 - Transferir grupos entre usuarios.
-- Multiples owners.
-- Aprobacion manual de miembros.
 - Links de invitacion de un solo uso.

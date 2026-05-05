@@ -34,7 +34,7 @@ export function JoinGroupCard({
       await onJoin({ participantId });
       setError(null);
     } catch {
-      setError('No se pudo entrar al grupo.');
+      setError('No se pudo enviar la solicitud.');
     } finally {
       setIsJoining(false);
     }
@@ -44,7 +44,7 @@ export function JoinGroupCard({
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName && !selectedParticipantId) {
-      setError('Elegí quién sos o creá un participante nuevo.');
+      setError('Elegi quien sos o crea un participante nuevo.');
       return;
     }
 
@@ -57,7 +57,7 @@ export function JoinGroupCard({
       }
       setError(null);
     } catch {
-      setError('No se pudo entrar al grupo.');
+      setError('No se pudo enviar la solicitud.');
     } finally {
       setIsJoining(false);
     }
@@ -67,8 +67,8 @@ export function JoinGroupCard({
     <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-4 bg-slate-50 px-4 py-6">
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-sm font-medium text-teal-700">Cuentas Claras</p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-950">Entrar a {group.name}</h1>
-        <p className="mt-2 text-sm text-slate-600">Elegí quién sos en este grupo o creá un participante nuevo.</p>
+        <h1 className="mt-2 text-2xl font-semibold text-slate-950">Solicitar acceso a {group.name}</h1>
+        <p className="mt-2 text-sm text-slate-600">Elegi quien sos en este grupo o crea un participante nuevo.</p>
 
         {error ? <p className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
 
@@ -84,7 +84,7 @@ export function JoinGroupCard({
               >
                 {participant.name}
                 {claimedIds.has(participant.id) ? (
-                  <span className="ml-2 text-sm font-normal text-slate-500">Ya está asociado a otra persona.</span>
+                  <span className="ml-2 text-sm font-normal text-slate-500">Ya esta asociado o pendiente.</span>
                 ) : null}
               </button>
             ))}
@@ -115,7 +115,7 @@ export function JoinGroupCard({
             disabled={isJoining}
             className="min-h-11 rounded-md bg-teal-700 px-4 font-semibold text-white disabled:bg-slate-300"
           >
-            {isJoining ? 'Entrando...' : 'Entrar al grupo'}
+            {isJoining ? 'Enviando...' : 'Enviar solicitud'}
           </button>
         </form>
 
