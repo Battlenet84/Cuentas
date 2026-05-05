@@ -91,7 +91,6 @@ function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMemberView[]>([]);
   const [syncStatus, setSyncStatus] = useState<RealtimeStatus>('idle');
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const realtimeRefreshTimeoutRef = useRef<number | null>(null);
   const isRealtimeRefreshingRef = useRef(false);
   const isExpensePanelOpenRef = useRef(false);
@@ -253,7 +252,6 @@ function App() {
       const remoteState = await loadGroupByShareToken(shareToken);
       setState(remoteState);
       setRouteMessage(null);
-      setLastSyncAt(new Date().toISOString());
       if (route.kind === 'sharedGroup') setSyncStatus('connected');
       const group = remoteState.groups[0];
       if (group?.shareToken && group.shareToken !== shareToken && remoteState.accessStatus === 'member') {
@@ -737,7 +735,6 @@ function App() {
             isSaving={isSaving}
             useSharedLink={route.kind === 'sharedGroup'}
             syncStatus={syncStatus}
-            lastSyncAt={lastSyncAt}
           />
         </div>
       </div>

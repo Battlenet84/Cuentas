@@ -54,7 +54,6 @@ type GroupDetailProps = {
   isSaving?: boolean;
   useSharedLink?: boolean;
   syncStatus?: RealtimeStatus;
-  lastSyncAt?: string | null;
 };
 
 export function GroupDetail({
@@ -90,8 +89,7 @@ export function GroupDetail({
   errorMessage,
   isSaving = false,
   useSharedLink = false,
-  syncStatus = 'idle',
-  lastSyncAt
+  syncStatus = 'idle'
 }: GroupDetailProps) {
   const [activeTab, setActiveTab] = useState<GroupTab>('summary');
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
@@ -155,14 +153,6 @@ export function GroupDetail({
     const origin = window.location.origin;
     if (useSharedLink && group.shareToken) return `${origin}/g/${group.shareToken}`;
     return `${origin}/group/${group.id}`;
-  }
-
-  function syncLabel(): string {
-    if (syncStatus === 'connecting') return 'Conectando tiempo real...';
-    if (syncStatus === 'connected') return lastSyncAt ? 'Actualizado recien' : 'Tiempo real activo';
-    if (syncStatus === 'syncing') return 'Actualizando...';
-    if (syncStatus === 'error') return 'No se pudo sincronizar';
-    return '';
   }
 
   function openCreateExpensePanel() {
@@ -316,26 +306,7 @@ export function GroupDetail({
     return (
       <div className="space-y-5">
         <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="font-semibold text-slate-900">Grupo</h2>
-          <p className="text-sm text-slate-600">{group.name}</p>
-          <button
-            type="button"
-            onClick={handleCopyGroupLink}
-            className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
-          >
-            Copiar link del grupo
-          </button>
-          <button
-            type="button"
-            onClick={onBack}
-            className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
-          >
-            Volver a Mis grupos
-          </button>
-        </section>
-
-        <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="font-semibold text-slate-900">Invitacion</h2>
+          <h2 className="font-semibold text-slate-900">Acceso al grupo</h2>
           <button
             type="button"
             onClick={handleCopyGroupLink}
@@ -353,10 +324,11 @@ export function GroupDetail({
             </button>
           ) : null}
           <p className="text-sm text-slate-600">Las personas con link deberan solicitar acceso.</p>
+          {isOwner ? <p className="text-sm text-slate-600">Las solicitudes se aprueban desde Personas.</p> : null}
         </section>
 
         <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="font-semibold text-slate-900">Periodo</h2>
+          <h2 className="font-semibold text-slate-900">Gestion del periodo</h2>
           <button
             type="button"
             onClick={handleClose}
@@ -371,6 +343,26 @@ export function GroupDetail({
         </section>
 
         <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="font-semibold text-slate-900">Datos y mantenimiento</h2>
+          {onManualRefresh ? (
+            <button
+              type="button"
+              onClick={onManualRefresh}
+              className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
+            >
+              Actualizar datos
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onBack}
+            className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
+          >
+            Volver a Mis grupos
+          </button>
+        </section>
+
+        <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="font-semibold text-slate-900">Cuenta</h2>
           {onSignOut ? (
             <button
@@ -380,7 +372,9 @@ export function GroupDetail({
             >
               Cerrar sesion
             </button>
-          ) : null}
+          ) : (
+            <p className="text-sm text-slate-500">No hay acciones de cuenta en modo local.</p>
+          )}
         </section>
       </div>
     );
@@ -394,7 +388,7 @@ export function GroupDetail({
             <div>
               <p className="text-xs text-slate-300">Grupo</p>
               <h1 className="mt-1 text-xl font-semibold md:text-2xl">{group.name}</h1>
-              <p className="mt-2 text-xs text-slate-300">{syncLabel()}</p>
+              {syncStatus === 'error' ? <p className="mt-2 text-xs text-slate-300">No se pudo sincronizar.</p> : null}
             </div>
             <button type="button" onClick={handleCopyGroupLink} className="text-xs font-semibold text-teal-100">
               Copiar link
@@ -417,15 +411,6 @@ export function GroupDetail({
         </div>
 
         {copyStatus ? <p className="text-sm text-slate-600">{copyStatus}</p> : null}
-
-        {onManualRefresh ? (
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-            <span>{syncLabel()}</span>
-            <button type="button" onClick={onManualRefresh} className="font-semibold text-teal-800">
-              Actualizar
-            </button>
-          </div>
-        ) : null}
 
         {errorMessage ? (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
