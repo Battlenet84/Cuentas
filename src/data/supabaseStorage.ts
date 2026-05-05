@@ -1,6 +1,7 @@
 import type {
   ActivityLog,
   AppState,
+  CurrencyCode,
   Expense,
   ExpensePayer,
   ExpenseSplit,
@@ -14,6 +15,7 @@ import type {
 } from '../types';
 import { getSupabaseClient } from '../lib/supabase';
 import { createShareToken } from '../lib/ids';
+import { normalizeCurrency } from '../lib/money';
 
 type RemoteGroup = {
   id: string;
@@ -48,6 +50,7 @@ type RemoteExpense = {
   group_id: string;
   title: string;
   amount_cents: number;
+  currency?: CurrencyCode | string | null;
   paid_by_participant_id: string | null;
   split_participant_ids: string[] | null;
   payer_mode?: 'single' | 'multiple';
@@ -74,6 +77,7 @@ type RemoteSettlementPayment = {
   from_participant_id: string;
   to_participant_id: string;
   amount_cents: number;
+  currency?: CurrencyCode | string | null;
   created_by_auth_user_id: string;
   created_at: string;
   settlement_cycle_id: string | null;
@@ -190,6 +194,7 @@ function mapExpense(expense: RemoteExpense): Expense {
     groupId: expense.group_id,
     title: expense.title,
     amountCents: expense.amount_cents,
+    currency: normalizeCurrency(expense.currency),
     paidByParticipantId: expense.paid_by_participant_id ?? undefined,
     splitParticipantIds: expense.split_participant_ids ?? [],
     payerMode: expense.payerMode ?? expense.payer_mode ?? 'single',
@@ -218,6 +223,7 @@ function mapSettlementPayment(payment: RemoteSettlementPayment): SettlementPayme
     fromParticipantId: payment.from_participant_id,
     toParticipantId: payment.to_participant_id,
     amountCents: payment.amount_cents,
+    currency: normalizeCurrency(payment.currency),
     createdByAuthUserId: payment.created_by_auth_user_id,
     createdAt: payment.created_at,
     settlementCycleId: payment.settlement_cycle_id,
@@ -315,6 +321,7 @@ function expensePayload(expense: Omit<Expense, 'id' | 'createdAt'> | Expense) {
   return {
     p_title: expense.title,
     p_amount_cents: expense.amountCents,
+    p_currency: normalizeCurrency(expense.currency),
     p_date: expense.date,
     p_payers: (expense.payers ?? []).map((payer) => ({
       participantId: payer.participantId,
@@ -502,14 +509,15 @@ export async function deleteRemoteExpense(shareToken: string, expenseId: string)
 
 export async function createSettlementPaymentByToken(
   shareToken: string,
-  input: { fromParticipantId: string; toParticipantId: string; amountCents: number }
+  input: { fromParticipantId: string; toParticipantId: string; amountCents: number; currency?: CurrencyCode }
 ): Promise<SettlementPayment> {
   const client = getSupabaseClient();
   const { data, error } = await client.rpc('create_settlement_payment_by_token', {
     p_share_token: shareToken,
     p_from_participant_id: input.fromParticipantId,
     p_to_participant_id: input.toParticipantId,
-    p_amount_cents: input.amountCents
+    p_amount_cents: input.amountCents,
+    p_currency: normalizeCurrency(input.currency)
   });
 
   return mapSettlementPayment(assertData(data as RemoteSettlementPayment | null, error, 'No se pudo registrar el pago.'));

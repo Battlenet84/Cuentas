@@ -1,4 +1,5 @@
 import type { AppState, Expense, Group, Participant, SettlementCycle, SettlementPayment } from '../types';
+import { normalizeCurrency } from '../lib/money';
 
 const STORAGE_KEY = 'cuentas-claras-state-v1';
 
@@ -22,9 +23,9 @@ export function loadState(): AppState {
     return {
       groups: Array.isArray(parsed.groups) ? parsed.groups : [],
       participants: Array.isArray(parsed.participants) ? parsed.participants : [],
-      expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
+      expenses: Array.isArray(parsed.expenses) ? parsed.expenses.map(normalizeExpense) : [],
       settlementCycles: Array.isArray(parsed.settlementCycles) ? parsed.settlementCycles : [],
-      settlementPayments: Array.isArray(parsed.settlementPayments) ? parsed.settlementPayments : [],
+      settlementPayments: Array.isArray(parsed.settlementPayments) ? parsed.settlementPayments.map(normalizeSettlementPayment) : [],
       activityLogs: Array.isArray(parsed.activityLogs) ? parsed.activityLogs : []
     };
   } catch (error) {
@@ -60,7 +61,7 @@ export function updateParticipant(state: AppState, participant: Participant): Ap
 }
 
 export function createExpense(state: AppState, expense: Expense): AppState {
-  return { ...state, expenses: [expense, ...state.expenses] };
+  return { ...state, expenses: [normalizeExpense(expense), ...state.expenses] };
 }
 
 export function updateExpense(state: AppState, expense: Expense): AppState {
@@ -82,7 +83,15 @@ export function createSettlementCycle(state: AppState, cycle: SettlementCycle): 
 }
 
 export function createSettlementPayment(state: AppState, payment: SettlementPayment): AppState {
-  return { ...state, settlementPayments: [payment, ...state.settlementPayments] };
+  return { ...state, settlementPayments: [normalizeSettlementPayment(payment), ...state.settlementPayments] };
+}
+
+function normalizeExpense(expense: Expense): Expense {
+  return { ...expense, currency: normalizeCurrency(expense.currency) };
+}
+
+function normalizeSettlementPayment(payment: SettlementPayment): SettlementPayment {
+  return { ...payment, currency: normalizeCurrency(payment.currency) };
 }
 
 export function assignSettlementCycleToExpenses(

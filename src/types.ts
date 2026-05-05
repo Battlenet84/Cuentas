@@ -1,3 +1,5 @@
+export type CurrencyCode = 'ARS' | 'USD' | 'EUR' | 'BRL' | 'UYU' | 'CLP';
+
 export type Group = {
   id: string;
   name: string;
@@ -32,6 +34,7 @@ export type Expense = {
   groupId: string;
   title: string;
   amountCents: number;
+  currency: CurrencyCode;
   paidByParticipantId?: string;
   splitParticipantIds?: string[];
   payerMode?: 'single' | 'multiple';
@@ -52,6 +55,7 @@ export type SettlementCycle = {
 
 export type Balance = {
   participantId: string;
+  currency?: CurrencyCode;
   paidCents: number;
   owedCents: number;
   balanceCents: number;
@@ -61,6 +65,7 @@ export type Settlement = {
   fromParticipantId: string;
   toParticipantId: string;
   amountCents: number;
+  currency: CurrencyCode;
 };
 
 export type SettlementPayment = {
@@ -69,6 +74,7 @@ export type SettlementPayment = {
   fromParticipantId: string;
   toParticipantId: string;
   amountCents: number;
+  currency: CurrencyCode;
   createdByAuthUserId: string;
   createdAt: string;
   settlementCycleId?: string | null;

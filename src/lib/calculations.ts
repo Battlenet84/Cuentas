@@ -1,4 +1,5 @@
-import type { Balance, Expense, ExpensePayer, ExpenseSplit, Group, Participant, Settlement, SettlementPayment } from '../types';
+import type { Balance, CurrencyCode, Expense, ExpensePayer, ExpenseSplit, Group, Participant, Settlement, SettlementPayment } from '../types';
+import { normalizeCurrency, supportedCurrencies } from './money';
 
 export function getOpenExpenses(expenses: Expense[]): Expense[] {
   return expenses.filter((expense) => !expense.settlementCycleId);
@@ -10,20 +11,32 @@ export function calculateBalances(
   expenses: Expense[],
   settlementPayments: SettlementPayment[] = []
 ): Balance[] {
+  return calculateBalancesForCurrency(group, participants, expenses, settlementPayments, 'ARS');
+}
+
+export function calculateBalancesForCurrency(
+  group: Group,
+  participants: Participant[],
+  expenses: Expense[],
+  settlementPayments: SettlementPayment[] = [],
+  currency: CurrencyCode = 'ARS'
+): Balance[] {
   const groupParticipants = participants.filter((participant) => participant.groupId === group.id);
   const participantIds = new Set(groupParticipants.map((participant) => participant.id));
   const balances = new Map<string, Balance>();
+  const resolvedCurrency = normalizeCurrency(currency);
 
   for (const participant of groupParticipants) {
     balances.set(participant.id, {
       participantId: participant.id,
+      currency: resolvedCurrency,
       paidCents: 0,
       owedCents: 0,
       balanceCents: 0
     });
   }
 
-  for (const expense of getOpenExpenses(expenses).filter((item) => item.groupId === group.id)) {
+  for (const expense of getOpenExpenses(expenses).filter((item) => item.groupId === group.id && normalizeCurrency(item.currency) === resolvedCurrency)) {
     const payers = resolveExpensePayers(expense);
     const splits = resolveExpenseSplits(expense, participantIds);
 
@@ -39,7 +52,7 @@ export function calculateBalances(
     }
   }
 
-  for (const payment of getOpenSettlementPayments(settlementPayments).filter((item) => item.groupId === group.id)) {
+  for (const payment of getOpenSettlementPayments(settlementPayments).filter((item) => item.groupId === group.id && normalizeCurrency(item.currency) === resolvedCurrency)) {
     const fromBalance = balances.get(payment.fromParticipantId);
     if (fromBalance) fromBalance.paidCents += payment.amountCents;
 
@@ -51,6 +64,32 @@ export function calculateBalances(
     ...balance,
     balanceCents: balance.paidCents - balance.owedCents
   }));
+}
+
+export function activeCurrencies(expenses: Expense[], settlementPayments: SettlementPayment[] = []): CurrencyCode[] {
+  const currencies = new Set<CurrencyCode>();
+  for (const expense of getOpenExpenses(expenses)) currencies.add(normalizeCurrency(expense.currency));
+  for (const payment of getOpenSettlementPayments(settlementPayments)) currencies.add(normalizeCurrency(payment.currency));
+  return supportedCurrencies.filter((currency) => currencies.has(currency));
+}
+
+export function calculateBalancesByCurrency(
+  group: Group,
+  participants: Participant[],
+  expenses: Expense[],
+  settlementPayments: SettlementPayment[] = []
+): Partial<Record<CurrencyCode, Balance[]>> {
+  const currencies = activeCurrencies(
+    expenses.filter((expense) => expense.groupId === group.id),
+    settlementPayments.filter((payment) => payment.groupId === group.id)
+  );
+
+  return Object.fromEntries(
+    currencies.map((currency) => [
+      currency,
+      calculateBalancesForCurrency(group, participants, expenses, settlementPayments, currency)
+    ])
+  ) as Partial<Record<CurrencyCode, Balance[]>>;
 }
 
 export function getOpenSettlementPayments(settlementPayments: SettlementPayment[]): SettlementPayment[] {
@@ -89,6 +128,7 @@ function resolveExpenseSplits(expense: Expense, participantIds: Set<string>): Ex
 }
 
 export function simplifySettlements(balances: Balance[]): Settlement[] {
+  const currency = normalizeCurrency(balances.find((balance) => balance.currency)?.currency);
   const creditors = balances
     .filter((balance) => balance.balanceCents > 0)
     .map((balance) => ({ participantId: balance.participantId, amountCents: balance.balanceCents }))
@@ -112,7 +152,8 @@ export function simplifySettlements(balances: Balance[]): Settlement[] {
       settlements.push({
         fromParticipantId: debtor.participantId,
         toParticipantId: creditor.participantId,
-        amountCents
+        amountCents,
+        currency
       });
     }
 
@@ -124,4 +165,15 @@ export function simplifySettlements(balances: Balance[]): Settlement[] {
   }
 
   return settlements;
+}
+
+export function simplifySettlementsByCurrency(
+  balancesByCurrency: Partial<Record<CurrencyCode, Balance[]>>
+): Partial<Record<CurrencyCode, Settlement[]>> {
+  return Object.fromEntries(
+    Object.entries(balancesByCurrency).map(([currency, balances]) => [
+      currency,
+      simplifySettlements(balances ?? []).map((settlement) => ({ ...settlement, currency: normalizeCurrency(currency) }))
+    ])
+  ) as Partial<Record<CurrencyCode, Settlement[]>>;
 }

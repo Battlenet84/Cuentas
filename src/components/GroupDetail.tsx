@@ -3,13 +3,14 @@ import type { ActivityLog, Expense, Group, GroupMembership, Participant, Settlem
 import type { GroupMemberView } from '../data/supabaseStorage';
 import type { RealtimeStatus } from '../data/realtime';
 import {
-  calculateBalances,
+  activeCurrencies,
+  calculateBalancesByCurrency,
   calculatePendingSettlementCents,
   getOpenExpenses,
   getOpenSettlementPayments,
-  simplifySettlements
+  simplifySettlementsByCurrency
 } from '../lib/calculations';
-import { formatARS } from '../lib/money';
+import { formatCurrencyAmount, normalizeCurrency } from '../lib/money';
 import { ExpenseForm } from './ExpenseForm';
 import { ParticipantsManager } from './ParticipantsManager';
 import { SettlementList } from './SettlementList';
@@ -107,14 +108,37 @@ export function GroupDetail({
   const openSettlementPayments = getOpenSettlementPayments(settlementPayments.filter((payment) => payment.groupId === group.id));
   const isOwner = currentMembership?.role === 'owner' && currentMembership.status === 'active';
   const openExpenses = getOpenExpenses(groupExpenses);
-  const totalOpenCents = openExpenses.reduce((total, expense) => total + expense.amountCents, 0);
+  const currencies = useMemo(() => activeCurrencies(openExpenses, openSettlementPayments), [openExpenses, openSettlementPayments]);
+  const totalOpenByCurrency = useMemo(
+    () =>
+      Object.fromEntries(
+        currencies.map((currency) => [
+          currency,
+          openExpenses
+            .filter((expense) => normalizeCurrency(expense.currency) === currency)
+            .reduce((total, expense) => total + expense.amountCents, 0)
+        ])
+      ),
+    [currencies, openExpenses]
+  );
 
-  const balances = useMemo(
-    () => calculateBalances(group, groupParticipants, groupExpenses, openSettlementPayments),
+  const balancesByCurrency = useMemo(
+    () => calculateBalancesByCurrency(group, groupParticipants, groupExpenses, openSettlementPayments),
     [group, groupParticipants, groupExpenses, openSettlementPayments]
   );
-  const settlements = useMemo(() => simplifySettlements(balances), [balances]);
-  const pendingSettlementCents = useMemo(() => calculatePendingSettlementCents(settlements), [settlements]);
+  const settlementsByCurrency = useMemo(() => simplifySettlementsByCurrency(balancesByCurrency), [balancesByCurrency]);
+  const settlements = useMemo(() => Object.values(settlementsByCurrency).flat(), [settlementsByCurrency]);
+  const pendingSettlementByCurrency = useMemo(
+    () =>
+      Object.fromEntries(
+        currencies.map((currency) => [
+          currency,
+          calculatePendingSettlementCents(settlementsByCurrency[currency] ?? [])
+        ])
+      ),
+    [currencies, settlementsByCurrency]
+  );
+  const pendingSettlementCents = settlements.reduce((total, settlement) => total + settlement.amountCents, 0);
 
   useEffect(() => {
     onExpensePanelOpenChange?.(isExpensePanelOpen);
@@ -132,22 +156,24 @@ export function GroupDetail({
     const lines = [
       `Resumen de "${group.name}"`,
       '',
-      `Total gastado: ${formatARS(totalOpenCents)}`,
-      `Pendiente por saldar: ${formatARS(pendingSettlementCents)}`,
-      '',
       'Para saldar:'
     ];
 
     if (settlements.length === 0) lines.push('Todo esta saldado.');
     else {
-      for (const settlement of settlements) {
-        const alias = participantAlias(settlement.toParticipantId);
-        const aliasText = alias ? ` — Alias: ${alias}` : '';
-        lines.push(
-          `- ${participantName(settlement.fromParticipantId)} le paga ${formatARS(settlement.amountCents)} a ${participantName(
-            settlement.toParticipantId
-          )}${aliasText}`
-        );
+      for (const currency of currencies) {
+        const currencySettlements = settlementsByCurrency[currency] ?? [];
+        if (currencySettlements.length === 0) continue;
+        lines.push('', `${currency}:`);
+        for (const settlement of currencySettlements) {
+          const alias = participantAlias(settlement.toParticipantId);
+          const aliasText = alias ? ` — Alias: ${alias}` : '';
+          lines.push(
+            `- ${participantName(settlement.fromParticipantId)} le paga ${formatCurrencyAmount(settlement.amountCents, currency)} a ${participantName(
+              settlement.toParticipantId
+            )}${aliasText}`
+          );
+        }
       }
     }
 
@@ -251,17 +277,31 @@ export function GroupDetail({
     if (activeTab === 'summary') {
       return (
         <div className="space-y-5">
-          <section className="grid gap-3 sm:grid-cols-2">
-            <div className="cc-card-soft">
-              <p className="text-sm font-medium text-slate-500">Total gastado</p>
-              <p className="mt-1 text-2xl font-semibold text-slate-950">{formatARS(totalOpenCents)}</p>
-            </div>
-            <div className="cc-card-soft">
-              <p className="text-sm font-medium text-slate-500">Pendiente por saldar</p>
-              <p className="mt-1 text-2xl font-semibold text-slate-950">
-                {pendingSettlementCents > 0 ? formatARS(pendingSettlementCents) : 'Todo saldado'}
-              </p>
-            </div>
+          <section className="grid gap-3">
+            {currencies.length === 0 ? (
+              <div className="cc-card-soft">
+                <p className="text-sm font-semibold text-slate-900">ARS</p>
+                <p className="mt-2 text-sm font-medium text-slate-500">Total gastado</p>
+                <p className="text-2xl font-semibold text-slate-950">{formatCurrencyAmount(0, 'ARS')}</p>
+              </div>
+            ) : null}
+            {currencies.map((currency) => (
+              <div key={currency} className="cc-card-soft">
+                <p className="text-sm font-semibold text-slate-900">{currency}</p>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Total gastado</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-950">{formatCurrencyAmount(totalOpenByCurrency[currency] ?? 0, currency)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Pendiente por saldar</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-950">
+                      {(pendingSettlementByCurrency[currency] ?? 0) > 0 ? formatCurrencyAmount(pendingSettlementByCurrency[currency] ?? 0, currency) : 'Todo saldado'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </section>
           {openExpenses.length === 0 ? <EmptyState title="Todavia no hay gastos abiertos." /> : null}
           {settlements.length === 0 && openExpenses.length > 0 ? <EmptyState title="Todavia no hay deudas pendientes." /> : null}
@@ -349,7 +389,7 @@ export function GroupDetail({
             Cerrar periodo
           </button>
           {pendingSettlementCents > 0 ? (
-            <p className="cc-muted">Solo podes cerrar el periodo cuando el saldo este en cero.</p>
+            <p className="cc-muted">Para cerrar el periodo, primero salda todas las deudas pendientes.</p>
           ) : null}
         </section>
 
@@ -406,7 +446,7 @@ export function GroupDetail({
             </button>
           </div>
           <p className="mt-3 text-sm text-slate-200">
-            Pendiente por saldar: {formatARS(pendingSettlementCents)}
+            Pendiente por saldar: {settlements.length === 0 ? 'Todo saldado' : currencies.map((currency) => formatCurrencyAmount(pendingSettlementByCurrency[currency] ?? 0, currency)).join(' · ')}
           </p>
         </header>
 

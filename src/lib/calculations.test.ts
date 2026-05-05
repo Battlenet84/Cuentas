@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { calculateBalances, calculatePendingSettlementCents, getOpenExpenses, simplifySettlements } from './calculations';
-import type { Expense, Group, Participant, SettlementPayment } from '../types';
+import {
+  calculateBalances,
+  calculateBalancesByCurrency,
+  calculatePendingSettlementCents,
+  getOpenExpenses,
+  simplifySettlements,
+  simplifySettlementsByCurrency
+} from './calculations';
+import type { Expense, Group, Participant, Settlement, SettlementPayment } from '../types';
 
 const group: Group = {
   id: 'group_1',
@@ -21,6 +28,7 @@ function expense(partial: Partial<Expense>): Expense {
     groupId: group.id,
     title: partial.title ?? 'Gasto',
     amountCents: partial.amountCents ?? 0,
+    currency: partial.currency ?? 'ARS',
     paidByParticipantId: partial.paidByParticipantId,
     splitParticipantIds: partial.splitParticipantIds,
     payerMode: partial.payerMode,
@@ -40,6 +48,7 @@ function payment(partial: Partial<SettlementPayment>): SettlementPayment {
     fromParticipantId: partial.fromParticipantId ?? 'agus',
     toParticipantId: partial.toParticipantId ?? 'flor',
     amountCents: partial.amountCents ?? 0,
+    currency: partial.currency ?? 'ARS',
     createdByAuthUserId: 'user_1',
     createdAt: '2026-05-01T00:00:00.000Z',
     settlementCycleId: partial.settlementCycleId ?? null,
@@ -148,7 +157,7 @@ describe('calculations', () => {
       payment({ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000 })
     ]));
 
-    expect(before).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000 }]);
+    expect(before).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000, currency: 'ARS' }]);
     expect(after).toEqual([]);
   });
 
@@ -192,7 +201,7 @@ describe('calculations', () => {
       payment({ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000 })
     ]));
 
-    expect(before).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000 }]);
+    expect(before).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000, currency: 'ARS' }]);
     expect(after).toEqual([]);
   });
 
@@ -212,7 +221,7 @@ describe('calculations', () => {
       payment({ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000, voidedAt: '2026-05-02T00:00:00.000Z' })
     ]));
 
-    expect(settlements).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000 }]);
+    expect(settlements).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000, currency: 'ARS' }]);
   });
 
   it('ignora pagos individuales cerrados', () => {
@@ -231,15 +240,95 @@ describe('calculations', () => {
       payment({ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000, settlementCycleId: 'cycle_1' })
     ]));
 
-    expect(settlements).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000 }]);
+    expect(settlements).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000, currency: 'ARS' }]);
   });
 
   it('calcula pendiente por saldar como suma de settlements', () => {
-    const settlements = [
-      { fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000 },
-      { fromParticipantId: 'tomi', toParticipantId: 'vale', amountCents: 500000 }
+    const settlements: Settlement[] = [
+      { fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000, currency: 'ARS' },
+      { fromParticipantId: 'tomi', toParticipantId: 'vale', amountCents: 500000, currency: 'ARS' }
     ];
 
     expect(calculatePendingSettlementCents(settlements)).toBe(1500000);
+  });
+
+  it('no mezcla gastos ARS y USD al calcular settlements', () => {
+    const expenses = [
+      expense({
+        amountCents: 2000000,
+        currency: 'ARS',
+        payers: [{ participantId: 'flor', amountCents: 2000000 }],
+        splits: [
+          { participantId: 'flor', amountCents: 1000000 },
+          { participantId: 'agus', amountCents: 1000000 }
+        ]
+      }),
+      expense({
+        id: 'usd',
+        amountCents: 30000,
+        currency: 'USD',
+        payers: [{ participantId: 'agus', amountCents: 30000 }],
+        splits: [
+          { participantId: 'agus', amountCents: 15000 },
+          { participantId: 'flor', amountCents: 15000 }
+        ]
+      })
+    ];
+
+    const settlementsByCurrency = simplifySettlementsByCurrency(calculateBalancesByCurrency(group, participants, expenses));
+
+    expect(settlementsByCurrency.ARS).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000, currency: 'ARS' }]);
+    expect(settlementsByCurrency.USD).toEqual([{ fromParticipantId: 'flor', toParticipantId: 'agus', amountCents: 15000, currency: 'USD' }]);
+  });
+
+  it('un pago ARS no afecta deuda USD', () => {
+    const expenses = [
+      expense({
+        amountCents: 30000,
+        currency: 'USD',
+        payers: [{ participantId: 'flor', amountCents: 30000 }],
+        splits: [
+          { participantId: 'flor', amountCents: 15000 },
+          { participantId: 'agus', amountCents: 15000 }
+        ]
+      })
+    ];
+
+    const settlementsByCurrency = simplifySettlementsByCurrency(calculateBalancesByCurrency(group, participants, expenses, [
+      payment({ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 15000, currency: 'ARS' })
+    ]));
+
+    expect(settlementsByCurrency.USD).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 15000, currency: 'USD' }]);
+  });
+
+  it('un pago USD salda deuda USD sin afectar ARS', () => {
+    const expenses = [
+      expense({
+        amountCents: 2000000,
+        currency: 'ARS',
+        payers: [{ participantId: 'flor', amountCents: 2000000 }],
+        splits: [
+          { participantId: 'flor', amountCents: 1000000 },
+          { participantId: 'agus', amountCents: 1000000 }
+        ]
+      }),
+      expense({
+        id: 'usd',
+        amountCents: 30000,
+        currency: 'USD',
+        payers: [{ participantId: 'flor', amountCents: 30000 }],
+        splits: [
+          { participantId: 'flor', amountCents: 15000 },
+          { participantId: 'agus', amountCents: 15000 }
+        ]
+      })
+    ];
+
+    const settlementsByCurrency = simplifySettlementsByCurrency(calculateBalancesByCurrency(group, participants, expenses, [
+      payment({ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 15000, currency: 'USD' })
+    ]));
+
+    expect(settlementsByCurrency.ARS).toEqual([{ fromParticipantId: 'agus', toParticipantId: 'flor', amountCents: 1000000, currency: 'ARS' }]);
+    expect(settlementsByCurrency.USD).toEqual([]);
   });
 });

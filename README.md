@@ -103,7 +103,8 @@ Los gastos soportan:
 - una persona que paga;
 - varias personas que pagan;
 - division en partes iguales;
-- division manual por monto.
+- division manual por monto;
+- division por porcentaje.
 
 El formulario valida que:
 - la suma pagada coincida con el total;
@@ -131,7 +132,7 @@ where ep.id is null or es.id is null;
 
 Si devuelve filas, ejecutar `supabase/schema.sql` completo de nuevo. El archivo incluye el backfill.
 
-Porcentajes quedan para mas adelante.
+Cada gasto tiene una moneda propia. Monedas iniciales: ARS, USD, EUR, BRL, UYU y CLP.
 
 ## Saldar deuda individual
 
@@ -139,7 +140,9 @@ Cada linea de "Para saldar" tiene boton "Saldar". Eso registra un pago real en `
 
 Cada deuda tambien permite copiar:
 - alias del receptor, si existe;
-- monto sin simbolo `$`, listo para pegar en banco o Mercado Pago.
+- monto sin simbolo ni codigo de moneda, listo para pegar en banco o Mercado Pago.
+
+Si el receptor tiene alias, tambien aparece "Abrir Mercado Pago". Esa accion copia el alias y abre Mercado Pago como ayuda. No es una integracion bancaria, no crea links de pago, no autocompleta el monto y no registra pagos automaticos. El usuario debe pegar alias/monto y confirmar manualmente.
 
 Ese pago ajusta el balance actual y se sincroniza por realtime.
 
@@ -153,14 +156,16 @@ Importante:
 ## Resumen de saldos
 
 En Resumen:
-- "Total gastado" suma los gastos abiertos del periodo.
-- "Pendiente por saldar" suma los settlements actuales.
+- "Total gastado" suma los gastos abiertos del periodo por moneda.
+- "Pendiente por saldar" suma los settlements actuales por moneda.
+
+La app permite gastos en varias monedas, pero no convierte automaticamente. ARS, USD, EUR, BRL, UYU y CLP se calculan por separado. Una deuda en ARS no se compensa con una deuda en USD. Tipo de cambio queda para una mejora futura.
 
 Cuando se registra un pago con "Saldar", "Pendiente por saldar" baja. "Total gastado" no baja porque representa gasto del periodo, no deuda pendiente.
 
 ## Cerrar periodo
 
-Cerrar periodo solo esta permitido si no queda nada pendiente por saldar. Si hay settlements, la UI bloquea el boton y la RPC tambien valida la regla.
+Cerrar periodo solo esta permitido si no queda nada pendiente por saldar en ninguna moneda. Si hay settlements en ARS, USD u otra moneda, la UI bloquea el boton y la RPC tambien valida la regla.
 
 Al cerrar:
 - se crea un `settlement_cycle`;
@@ -169,7 +174,9 @@ Al cerrar:
 
 Los pagos anulados no se archivan como pagos activos ni afectan balances.
 
-En Movimientos > Cierres, cada cierre muestra cantidad de gastos y pagos incluidos. El detalle abre una hoja con gastos, pagos y totales del periodo cerrado.
+En Movimientos > Cierres, cada cierre muestra cantidad de gastos y pagos incluidos. El detalle abre una hoja con resumen, estadisticas, gastos, pagos y totales del periodo cerrado.
+
+Las estadisticas del cierre se calculan por moneda e incluyen total gastado, cantidad de gastos, cantidad de pagos, quien pago mas, quien consumio mas y gasto mas alto. No se suman monedas distintas.
 
 ## Tiempo real
 
@@ -235,7 +242,7 @@ El porcentaje se calcula en el formulario y se guarda en `expense_splits.amount_
 
 ## Buscador y filtros
 
-Movimientos incluye busqueda local y filtros por tipo, participante y fecha (`Hoy`, `Ultimos 7 dias`, `Este mes`). La actividad no aparece en `Todos`; se ve desde el filtro `Actividad`.
+Movimientos incluye busqueda local y filtros por tipo, participante, moneda y fecha (`Hoy`, `Ultimos 7 dias`, `Este mes`). La actividad no aparece en `Todos`; se ve desde el filtro `Actividad`.
 
 ## Diagnostico antes de indices unicos
 

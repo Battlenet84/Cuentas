@@ -588,7 +588,8 @@ function App() {
         createSettlementPaymentByToken(route.shareToken, {
           fromParticipantId: settlement.fromParticipantId,
           toParticipantId: settlement.toParticipantId,
-          amountCents: settlement.amountCents
+          amountCents: settlement.amountCents,
+          currency: settlement.currency
         }).then(() => undefined),
       'No se pudo registrar el pago.'
     );

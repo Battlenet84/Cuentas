@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import type { ActivityLog, Expense, ExpenseSplit, Participant, SettlementCycle, SettlementPayment } from '../types';
+import type { ActivityLog, CurrencyCode, Expense, ExpenseSplit, Participant, SettlementCycle, SettlementPayment } from '../types';
 import { formatDate, formatMovementDateGroup, movementDateKey } from '../lib/dates';
-import { formatARS } from '../lib/money';
+import { formatCurrencyAmount, normalizeCurrency, supportedCurrencies } from '../lib/money';
 import { EmptyState } from './EmptyState';
 
 type MovementFilter = 'all' | 'expenses' | 'payments' | 'cycles' | 'activity';
@@ -45,6 +45,7 @@ export function GroupMovements({
   const [filter, setFilter] = useState<MovementFilter>('all');
   const [query, setQuery] = useState('');
   const [participantFilter, setParticipantFilter] = useState('all');
+  const [currencyFilter, setCurrencyFilter] = useState<'all' | CurrencyCode>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [error, setError] = useState<string | null>(null);
   const [detailExpense, setDetailExpense] = useState<Expense | null>(null);
@@ -63,6 +64,7 @@ export function GroupMovements({
       if (filter === 'activity') return item.type === 'activity';
       return item.type !== 'activity';
     }).filter((item) => matchesParticipant(item, participantFilter))
+      .filter((item) => matchesCurrency(item, currencyFilter))
       .filter((item) => matchesDate(item.date, dateFilter))
       .filter((item) => matchesQuery(item, query));
 
@@ -74,7 +76,7 @@ export function GroupMovements({
     }
 
     return Array.from(groups.entries()).map(([date, groupItems]) => ({ date, items: groupItems }));
-  }, [activityLogs, dateFilter, expenses, filter, participantFilter, query, settlementCycles, settlementPayments]);
+  }, [activityLogs, currencyFilter, dateFilter, expenses, filter, participantFilter, query, settlementCycles, settlementPayments]);
 
   async function handleDelete(expense: Expense) {
     const confirmed = window.confirm(`Eliminar el gasto "${expense.title}"?`);
@@ -115,11 +117,11 @@ export function GroupMovements({
 
     if (payers.length === 0) return 'Sin pagador';
     if (payers.length === 1) return `Pago ${participantName(payers[0].participantId)}`;
-    return `Pagaron ${payers.map((payer) => `${participantName(payer.participantId)} ${formatARS(payer.amountCents)}`).join(' y ')}`;
+    return `Pagaron ${payers.map((payer) => `${participantName(payer.participantId)} ${formatCurrencyAmount(payer.amountCents, expense.currency)}`).join(' y ')}`;
   }
 
   function emptyTitle(): string {
-    if (query.trim() || participantFilter !== 'all' || dateFilter !== 'all') return 'No encontramos movimientos con esos filtros.';
+    if (query.trim() || participantFilter !== 'all' || currencyFilter !== 'all' || dateFilter !== 'all') return 'No encontramos movimientos con esos filtros.';
     if (filter === 'expenses') return 'Todavia no hay gastos.';
     if (filter === 'payments') return 'Todavia no hay pagos registrados.';
     if (filter === 'cycles') return 'Todavia no hay cierres.';
@@ -130,6 +132,7 @@ export function GroupMovements({
   function resetFilters() {
     setQuery('');
     setParticipantFilter('all');
+    setCurrencyFilter('all');
     setDateFilter('all');
   }
 
@@ -155,13 +158,21 @@ export function GroupMovements({
     return normalize(searchText(item)).includes(normalized);
   }
 
+  function matchesCurrency(item: MovementItem, currency: 'all' | CurrencyCode): boolean {
+    if (currency === 'all') return true;
+    if (item.type === 'expense') return normalizeCurrency(item.expense.currency) === currency;
+    if (item.type === 'payment') return normalizeCurrency(item.payment.currency) === currency;
+    if (item.type === 'activity') return normalize(String(item.activity.metadata.currency ?? '')).includes(normalize(currency));
+    return true;
+  }
+
   function searchText(item: MovementItem): string {
     if (item.type === 'expense') {
       const names = expenseParticipantIds(item.expense).map(participantLabel).join(' ');
-      return `gasto ${item.expense.title} ${formatARS(item.expense.amountCents)} ${names}`;
+      return `gasto ${item.expense.title} ${formatCurrencyAmount(item.expense.amountCents, item.expense.currency)} ${normalizeCurrency(item.expense.currency)} ${names}`;
     }
     if (item.type === 'payment') {
-      return `pago saldar ${participantLabel(item.payment.fromParticipantId)} ${participantLabel(item.payment.toParticipantId)} ${formatARS(item.payment.amountCents)}`;
+      return `pago saldar ${participantLabel(item.payment.fromParticipantId)} ${participantLabel(item.payment.toParticipantId)} ${formatCurrencyAmount(item.payment.amountCents, item.payment.currency)} ${normalizeCurrency(item.payment.currency)}`;
     }
     if (item.type === 'cycle') return `cierre periodo ${item.cycle.title}`;
     return `actividad ${activityText(item.activity, item.activity.actorName || 'Alguien', participantName)}`;
@@ -194,12 +205,20 @@ export function GroupMovements({
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-3">
         <select value={participantFilter} onChange={(event) => setParticipantFilter(event.target.value)} className="cc-input">
           <option value="all">Participante: Todos</option>
           {participants.map((participant) => (
             <option key={participant.id} value={participant.id}>
               {participant.name}
+            </option>
+          ))}
+        </select>
+        <select value={currencyFilter} onChange={(event) => setCurrencyFilter(event.target.value as 'all' | CurrencyCode)} className="cc-input">
+          <option value="all">Moneda: Todas</option>
+          {supportedCurrencies.map((currency) => (
+            <option key={currency} value={currency}>
+              {currency}
             </option>
           ))}
         </select>
@@ -216,7 +235,7 @@ export function GroupMovements({
       {movementGroups.length === 0 ? (
         <div className="space-y-3">
           <EmptyState title={emptyTitle()} />
-          {(query.trim() || participantFilter !== 'all' || dateFilter !== 'all') ? (
+          {(query.trim() || participantFilter !== 'all' || currencyFilter !== 'all' || dateFilter !== 'all') ? (
             <button type="button" onClick={resetFilters} className="cc-button-secondary">
               Limpiar filtros
             </button>
@@ -330,7 +349,7 @@ function ExpenseMovementCard({
           <p className="text-xs text-slate-500">{formatDate(expense.date)}</p>
           <h3 className="mt-1 font-semibold text-slate-900">{expense.title}</h3>
         </div>
-        <span className="font-semibold text-slate-900">{formatARS(expense.amountCents)}</span>
+        <span className="font-semibold text-slate-900">{formatCurrencyAmount(expense.amountCents, expense.currency)}</span>
       </div>
       <div className="mt-2 space-y-1 text-sm text-slate-600">
         <p>{payerText}</p>
@@ -375,7 +394,7 @@ function PaymentMovementCard({
             {fromName} le pago a {toName}
           </h3>
         </div>
-        <span className="font-semibold text-slate-900">{formatARS(payment.amountCents)}</span>
+        <span className="font-semibold text-slate-900">{formatCurrencyAmount(payment.amountCents, payment.currency)}</span>
       </div>
       {toAlias ? <p className="mt-2 text-sm text-slate-600">Alias de {toName}: {toAlias}</p> : null}
       {isVoided ? (
@@ -411,17 +430,18 @@ function activityText(activity: ActivityLog, actor: string, participantName: (id
   const title = metadataString(activity.metadata, 'title');
   const amountCents = metadataNumber(activity.metadata, 'amount_cents');
 
-  if (activity.action === 'expense_created') return `${actor} cargo el gasto${title ? ` "${title}"` : ''}${amountCents ? ` por ${formatARS(amountCents)}` : ''}`;
+  const currency = normalizeCurrency(metadataString(activity.metadata, 'currency'));
+  if (activity.action === 'expense_created') return `${actor} cargo el gasto${title ? ` "${title}"` : ''}${amountCents ? ` por ${formatCurrencyAmount(amountCents, currency)}` : ''}`;
   if (activity.action === 'expense_updated') return `${actor} edito el gasto${title ? ` "${title}"` : ''}`;
   if (activity.action === 'expense_deleted') return `${actor} elimino el gasto${title ? ` "${title}"` : ''}`;
   if (activity.action === 'payment_created') {
     const fromId = metadataString(activity.metadata, 'from_participant_id');
     const toId = metadataString(activity.metadata, 'to_participant_id');
-    const amount = amountCents ? ` de ${formatARS(amountCents)}` : '';
+    const amount = amountCents ? ` de ${formatCurrencyAmount(amountCents, currency)}` : '';
     const parties = fromId && toId ? `: ${participantName(fromId)} le pago a ${participantName(toId)}` : '';
     return `${actor} marco como saldada una deuda${amount}${parties}`;
   }
-  if (activity.action === 'payment_voided') return `${actor} anulo un pago${amountCents ? ` de ${formatARS(amountCents)}` : ''}`;
+  if (activity.action === 'payment_voided') return `${actor} anulo un pago${amountCents ? ` de ${formatCurrencyAmount(amountCents, currency)}` : ''}`;
   if (activity.action === 'period_closed') return `${actor} cerro un periodo`;
   if (activity.action === 'participant_created') return `${actor} agrego a ${metadataString(activity.metadata, 'name') ?? 'un participante'} como participante`;
   if (activity.action === 'participant_updated') return `${actor} edito un participante`;
@@ -558,7 +578,7 @@ function ExpenseDetailSheet({
             Cerrar
           </button>
         </div>
-        <p className="mt-3 text-2xl font-semibold text-slate-950">{formatARS(expense.amountCents)}</p>
+        <p className="mt-3 text-2xl font-semibold text-slate-950">{formatCurrencyAmount(expense.amountCents, expense.currency)}</p>
         <div className="mt-3 grid gap-1 text-sm text-slate-600">
           <p>Modo de pago: {payerModeLabel(expense.payerMode)}</p>
           <p>Modo de division: {splitModeLabel(expense.splitMode)}</p>
@@ -567,7 +587,7 @@ function ExpenseDetailSheet({
           <h3 className="font-semibold text-slate-900">Pagadores</h3>
           {payers.map((payer) => (
             <p key={payer.participantId} className="text-sm text-slate-600">
-              {participantName(payer.participantId)} pago {formatARS(payer.amountCents)}
+              {participantName(payer.participantId)} pago {formatCurrencyAmount(payer.amountCents, expense.currency)}
             </p>
           ))}
         </section>
@@ -575,7 +595,7 @@ function ExpenseDetailSheet({
           <h3 className="font-semibold text-slate-900">Division</h3>
           {splits.map((split) => (
             <p key={split.participantId} className="text-sm text-slate-600">
-              {participantName(split.participantId)} - {split.percentage != null ? `${formatPercent(split.percentage)} = ` : ''}{formatARS(split.amountCents)}
+              {participantName(split.participantId)} - {split.percentage != null ? `${formatPercent(split.percentage)} = ` : ''}{formatCurrencyAmount(split.amountCents, expense.currency)}
             </p>
           ))}
         </section>
@@ -585,7 +605,7 @@ function ExpenseDetailSheet({
             const balance = values.paid - values.owed;
             return (
               <p key={participantId} className="text-sm text-slate-600">
-                {participantName(participantId)} queda {balance >= 0 ? '+' : '-'}{formatARS(Math.abs(balance))}
+                {participantName(participantId)} queda {balance >= 0 ? '+' : '-'}{formatCurrencyAmount(Math.abs(balance), expense.currency)}
               </p>
             );
           })}
@@ -621,8 +641,7 @@ function CycleDetailSheet({
   onClose: () => void;
 }) {
   const participantName = (id: string) => participants.find((participant) => participant.id === id)?.name ?? 'Participante';
-  const totalExpenses = expenses.reduce((total, expense) => total + expense.amountCents, 0);
-  const totalPayments = payments.reduce((total, payment) => total + payment.amountCents, 0);
+  const stats = buildCycleStats(expenses, payments, participantName);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4">
@@ -637,12 +656,26 @@ function CycleDetailSheet({
           </button>
         </div>
         <section className="mt-4 space-y-2">
+          <h3 className="font-semibold text-slate-900">Estadisticas del cierre</h3>
+          {stats.map((item) => (
+            <div key={item.currency} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <p className="font-semibold text-slate-900">{item.currency}</p>
+              <p>Total gastado: {formatCurrencyAmount(item.totalExpenses, item.currency)}</p>
+              <p>{item.expenseCount} gastos</p>
+              <p>{item.paymentCount} pagos registrados</p>
+              {item.topPayer ? <p>Quien pago mas: {item.topPayer.name} pago {formatCurrencyAmount(item.topPayer.amountCents, item.currency)}</p> : null}
+              {item.topConsumer ? <p>Quien consumio mas: {item.topConsumer.name} consumio {formatCurrencyAmount(item.topConsumer.amountCents, item.currency)}</p> : null}
+              {item.highestExpense ? <p>Gasto mas alto: {item.highestExpense.title} - {formatCurrencyAmount(item.highestExpense.amountCents, item.currency)}</p> : null}
+            </div>
+          ))}
+        </section>
+        <section className="mt-4 space-y-2">
           <h3 className="font-semibold text-slate-900">Gastos incluidos</h3>
           {expenses.length === 0 ? <p className="text-sm text-slate-500">Sin gastos incluidos.</p> : null}
           {expenses.map((expense) => (
             <div key={expense.id} className="rounded-md bg-slate-50 p-2 text-sm text-slate-700">
               <p className="font-medium">{expense.title}</p>
-              <p>{formatARS(expense.amountCents)} - {formatDate(expense.date)}</p>
+        <p>{formatCurrencyAmount(expense.amountCents, expense.currency)} - {formatDate(expense.date)}</p>
             </div>
           ))}
         </section>
@@ -652,15 +685,80 @@ function CycleDetailSheet({
           {payments.map((payment) => (
             <div key={payment.id} className="rounded-md bg-slate-50 p-2 text-sm text-slate-700">
               <p className="font-medium">{participantName(payment.fromParticipantId)} le pago a {participantName(payment.toParticipantId)}</p>
-              <p>{formatARS(payment.amountCents)} - {new Date(payment.createdAt).toLocaleDateString('es-AR')}</p>
+              <p>{formatCurrencyAmount(payment.amountCents, payment.currency)} - {new Date(payment.createdAt).toLocaleDateString('es-AR')}</p>
             </div>
           ))}
         </section>
         <section className="mt-4 rounded-lg border border-slate-200 p-3 text-sm text-slate-700">
-          <p>Total gastos incluidos: {formatARS(totalExpenses)}</p>
-          <p>Total pagos registrados incluidos: {formatARS(totalPayments)}</p>
+          {stats.map((item) => (
+            <div key={`summary-${item.currency}`}>
+              <p>Total gastos incluidos {item.currency}: {formatCurrencyAmount(item.totalExpenses, item.currency)}</p>
+              <p>Total pagos registrados incluidos {item.currency}: {formatCurrencyAmount(item.totalPayments, item.currency)}</p>
+            </div>
+          ))}
         </section>
       </div>
     </div>
   );
+}
+
+function buildCycleStats(
+  expenses: Expense[],
+  payments: SettlementPayment[],
+  participantName: (id: string) => string
+): Array<{
+  currency: CurrencyCode;
+  totalExpenses: number;
+  totalPayments: number;
+  expenseCount: number;
+  paymentCount: number;
+  topPayer: { name: string; amountCents: number } | null;
+  topConsumer: { name: string; amountCents: number } | null;
+  highestExpense: { title: string; amountCents: number } | null;
+}> {
+  const currencies = supportedCurrencies.filter((currency) =>
+    expenses.some((expense) => normalizeCurrency(expense.currency) === currency) ||
+    payments.some((payment) => normalizeCurrency(payment.currency) === currency)
+  );
+
+  return currencies.map((currency) => {
+    const currencyExpenses = expenses.filter((expense) => normalizeCurrency(expense.currency) === currency);
+    const currencyPayments = payments.filter((payment) => normalizeCurrency(payment.currency) === currency);
+    const paidByParticipant = new Map<string, number>();
+    const consumedByParticipant = new Map<string, number>();
+
+    for (const expense of currencyExpenses) {
+      const payers = expense.payers?.length
+        ? expense.payers
+        : expense.paidByParticipantId
+          ? [{ participantId: expense.paidByParticipantId, amountCents: expense.amountCents }]
+          : [];
+      const splits = expense.splits?.length ? expense.splits : [];
+      for (const payer of payers) paidByParticipant.set(payer.participantId, (paidByParticipant.get(payer.participantId) ?? 0) + payer.amountCents);
+      for (const split of splits) consumedByParticipant.set(split.participantId, (consumedByParticipant.get(split.participantId) ?? 0) + split.amountCents);
+    }
+
+    const topPayer = topParticipant(paidByParticipant, participantName);
+    const topConsumer = topParticipant(consumedByParticipant, participantName);
+    const highestExpense = currencyExpenses.reduce<Expense | null>((highest, expense) => (!highest || expense.amountCents > highest.amountCents ? expense : highest), null);
+
+    return {
+      currency,
+      totalExpenses: currencyExpenses.reduce((total, expense) => total + expense.amountCents, 0),
+      totalPayments: currencyPayments.reduce((total, payment) => total + payment.amountCents, 0),
+      expenseCount: currencyExpenses.length,
+      paymentCount: currencyPayments.length,
+      topPayer,
+      topConsumer,
+      highestExpense: highestExpense ? { title: highestExpense.title, amountCents: highestExpense.amountCents } : null
+    };
+  });
+}
+
+function topParticipant(values: Map<string, number>, participantName: (id: string) => string): { name: string; amountCents: number } | null {
+  let top: { id: string; amountCents: number } | null = null;
+  for (const [id, amountCents] of values.entries()) {
+    if (!top || amountCents > top.amountCents) top = { id, amountCents };
+  }
+  return top ? { name: participantName(top.id), amountCents: top.amountCents } : null;
 }

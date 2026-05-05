@@ -1,5 +1,7 @@
 import type { Participant, Settlement } from '../types';
-import { formatARS } from '../lib/money';
+import { formatCurrencyAmount } from '../lib/money';
+import { copyToClipboard } from '../lib/clipboard';
+import { openMercadoPago } from '../lib/mercadoPago';
 import { useState } from 'react';
 
 type SettlementListProps = {
@@ -22,7 +24,7 @@ export function SettlementList({ settlements, participants, onSettle }: Settleme
   async function handleSettle(settlement: Settlement) {
     const from = participantName(settlement.fromParticipantId);
     const to = participantName(settlement.toParticipantId);
-    const confirmed = window.confirm(`Confirmas que ${from} le pago ${formatARS(settlement.amountCents)} a ${to}?`);
+    const confirmed = window.confirm(`Confirmas que ${from} le pago ${formatCurrencyAmount(settlement.amountCents, settlement.currency)} a ${to}?`);
     if (!confirmed) return;
     try {
       await onSettle?.(settlement);
@@ -35,12 +37,26 @@ export function SettlementList({ settlements, participants, onSettle }: Settleme
 
   async function copyText(text: string, message: string) {
     try {
-      await navigator.clipboard.writeText(text);
+      const copied = await copyToClipboard(text);
+      if (!copied) throw new Error('copy failed');
       setCopyStatus(message);
       setError(null);
     } catch {
       setError('No se pudo copiar.');
     }
+  }
+
+  async function handleOpenMercadoPago(alias: string) {
+    const copied = await copyToClipboard(alias);
+    if (!copied) {
+      setError('No se pudo copiar el alias.');
+      return;
+    }
+
+    setCopyStatus('Alias copiado. Pegalo en Mercado Pago.');
+    setError(null);
+    const opened = openMercadoPago();
+    if (!opened) setError('No pudimos abrir Mercado Pago. Abrilo manualmente y pega el alias copiado.');
   }
 
   function copyableAmount(amountCents: number): string {
@@ -72,7 +88,7 @@ export function SettlementList({ settlements, participants, onSettle }: Settleme
                   <div>
                     <p className="text-sm leading-6 text-slate-700">
                       <span className="font-semibold">{participantName(settlement.fromParticipantId)}</span> le paga{' '}
-                      <span className="font-semibold">{formatARS(settlement.amountCents)}</span> a{' '}
+                      <span className="font-semibold">{formatCurrencyAmount(settlement.amountCents, settlement.currency)}</span> a{' '}
                       <span className="font-semibold">{participantName(settlement.toParticipantId)}</span>
                     </p>
                     {receiver?.alias ? (
@@ -96,6 +112,15 @@ export function SettlementList({ settlements, participants, onSettle }: Settleme
                     >
                       Copiar monto
                     </button>
+                    {receiver?.alias ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleOpenMercadoPago(receiver.alias ?? '')}
+                        className="cc-button-secondary"
+                      >
+                        Abrir Mercado Pago
+                      </button>
+                    ) : null}
                     {onSettle ? (
                       <button
                         type="button"

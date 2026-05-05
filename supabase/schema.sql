@@ -606,6 +606,338 @@ execute function public.notify_group_changed();
 
 NOTIFY pgrst, 'reload schema';
 
+-- Iteracion: Mercado Pago asistido, multimoneda y estadisticas por cierre.
+-- Ejecutar este bloque completo en SQL Editor. Es re-ejecutable.
+
+alter table public.expenses
+  add column if not exists currency text not null default 'ARS';
+
+alter table public.settlement_payments
+  add column if not exists currency text not null default 'ARS';
+
+update public.expenses set currency = 'ARS' where currency is null;
+update public.settlement_payments set currency = 'ARS' where currency is null;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'expenses_currency_check') then
+    alter table public.expenses
+      add constraint expenses_currency_check check (currency in ('ARS', 'USD', 'EUR', 'BRL', 'UYU', 'CLP'));
+  end if;
+
+  if not exists (select 1 from pg_constraint where conname = 'settlement_payments_currency_check') then
+    alter table public.settlement_payments
+      add constraint settlement_payments_currency_check check (currency in ('ARS', 'USD', 'EUR', 'BRL', 'UYU', 'CLP'));
+  end if;
+end;
+$$;
+
+create or replace function public.normalize_currency(p_currency text)
+returns text
+language sql
+stable
+as $$
+  select case when p_currency in ('ARS', 'USD', 'EUR', 'BRL', 'UYU', 'CLP') then p_currency else 'ARS' end;
+$$;
+
+create or replace function public.validate_currency(p_currency text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_currency not in ('ARS', 'USD', 'EUR', 'BRL', 'UYU', 'CLP') then
+    raise exception 'Moneda invalida.';
+  end if;
+end;
+$$;
+
+create or replace function public.expense_with_lines_json(p_expense expenses)
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  select to_jsonb(p_expense)
+    || jsonb_build_object(
+      'payerMode', p_expense.payer_mode,
+      'splitMode', p_expense.split_mode,
+      'currency', public.normalize_currency(p_expense.currency),
+      'payers', coalesce((select jsonb_agg(jsonb_build_object('participantId', ep.participant_id, 'amountCents', ep.amount_cents) order by ep.id) from expense_payers ep where ep.expense_id = p_expense.id), '[]'::jsonb),
+      'splits', coalesce((select jsonb_agg(jsonb_build_object('participantId', es.participant_id, 'amountCents', es.amount_cents, 'percentage', es.percentage) order by es.id) from expense_splits es where es.expense_id = p_expense.id), '[]'::jsonb)
+    );
+$$;
+
+create or replace function public.create_expense_by_token(
+  p_share_token text,
+  p_title text,
+  p_amount_cents integer,
+  p_date date,
+  p_payers jsonb,
+  p_splits jsonb,
+  p_payer_mode text,
+  p_split_mode text,
+  p_currency text default 'ARS'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_member_group_id(p_share_token);
+  v_expense expenses%rowtype;
+  v_first_payer uuid;
+  v_split_ids uuid[];
+  v_currency text := public.normalize_currency(p_currency);
+begin
+  if nullif(trim(p_title), '') is null then raise exception 'El nombre del gasto es obligatorio.'; end if;
+  perform public.validate_currency(v_currency);
+  perform public.validate_expense_payload(v_group_id, p_amount_cents, p_payers, p_splits, p_payer_mode, p_split_mode);
+  select (item->>'participantId')::uuid into v_first_payer from jsonb_array_elements(p_payers) item limit 1;
+  select array_agg((item->>'participantId')::uuid) into v_split_ids from jsonb_array_elements(p_splits) item;
+
+  insert into expenses (group_id, title, amount_cents, currency, paid_by_participant_id, split_participant_ids, date, payer_mode, split_mode)
+  values (v_group_id, trim(p_title), p_amount_cents, v_currency, v_first_payer, v_split_ids, p_date, p_payer_mode, p_split_mode)
+  returning * into v_expense;
+
+  insert into expense_payers (expense_id, participant_id, amount_cents)
+  select v_expense.id, (item->>'participantId')::uuid, (item->>'amountCents')::integer from jsonb_array_elements(p_payers) item;
+  insert into expense_splits (expense_id, participant_id, amount_cents, percentage)
+  select v_expense.id, (item->>'participantId')::uuid, (item->>'amountCents')::integer, nullif(item->>'percentage', '')::numeric from jsonb_array_elements(p_splits) item;
+  perform public.log_group_activity(v_group_id, 'expense_created', 'expense', v_expense.id, jsonb_build_object('title', v_expense.title, 'amount_cents', v_expense.amount_cents, 'currency', v_currency));
+  return public.expense_with_lines_json(v_expense);
+end;
+$$;
+
+create or replace function public.update_expense_by_token(
+  p_share_token text,
+  p_expense_id uuid,
+  p_title text,
+  p_amount_cents integer,
+  p_date date,
+  p_payers jsonb,
+  p_splits jsonb,
+  p_payer_mode text,
+  p_split_mode text,
+  p_currency text default 'ARS'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_member_group_id(p_share_token);
+  v_expense expenses%rowtype;
+  v_first_payer uuid;
+  v_split_ids uuid[];
+  v_currency text := public.normalize_currency(p_currency);
+begin
+  if nullif(trim(p_title), '') is null then raise exception 'El nombre del gasto es obligatorio.'; end if;
+  perform public.validate_currency(v_currency);
+  perform public.validate_expense_payload(v_group_id, p_amount_cents, p_payers, p_splits, p_payer_mode, p_split_mode);
+  if not exists (select 1 from expenses where id = p_expense_id and group_id = v_group_id) then raise exception 'No encontramos ese gasto en este grupo.'; end if;
+  select (item->>'participantId')::uuid into v_first_payer from jsonb_array_elements(p_payers) item limit 1;
+  select array_agg((item->>'participantId')::uuid) into v_split_ids from jsonb_array_elements(p_splits) item;
+
+  update expenses
+  set title = trim(p_title), amount_cents = p_amount_cents, currency = v_currency, paid_by_participant_id = v_first_payer, split_participant_ids = v_split_ids, date = p_date, payer_mode = p_payer_mode, split_mode = p_split_mode
+  where id = p_expense_id and group_id = v_group_id
+  returning * into v_expense;
+
+  delete from expense_payers where expense_id = v_expense.id;
+  delete from expense_splits where expense_id = v_expense.id;
+  insert into expense_payers (expense_id, participant_id, amount_cents)
+  select v_expense.id, (item->>'participantId')::uuid, (item->>'amountCents')::integer from jsonb_array_elements(p_payers) item;
+  insert into expense_splits (expense_id, participant_id, amount_cents, percentage)
+  select v_expense.id, (item->>'participantId')::uuid, (item->>'amountCents')::integer, nullif(item->>'percentage', '')::numeric from jsonb_array_elements(p_splits) item;
+  perform public.log_group_activity(v_group_id, 'expense_updated', 'expense', v_expense.id, jsonb_build_object('title', v_expense.title, 'amount_cents', v_expense.amount_cents, 'currency', v_currency));
+  return public.expense_with_lines_json(v_expense);
+end;
+$$;
+
+create or replace function public.currency_has_pending_debt(
+  p_group_id uuid,
+  p_currency text,
+  p_from_participant_id uuid,
+  p_to_participant_id uuid
+)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  with paid as (
+    select ep.participant_id, sum(ep.amount_cents)::integer as amount_cents
+    from expenses e
+    join expense_payers ep on ep.expense_id = e.id
+    where e.group_id = p_group_id and e.settlement_cycle_id is null and public.normalize_currency(e.currency) = p_currency
+    group by ep.participant_id
+    union all
+    select sp.from_participant_id, sum(sp.amount_cents)::integer
+    from settlement_payments sp
+    where sp.group_id = p_group_id and sp.voided_at is null and sp.settlement_cycle_id is null and public.normalize_currency(sp.currency) = p_currency
+    group by sp.from_participant_id
+  ),
+  owed as (
+    select es.participant_id, sum(es.amount_cents)::integer as amount_cents
+    from expenses e
+    join expense_splits es on es.expense_id = e.id
+    where e.group_id = p_group_id and e.settlement_cycle_id is null and public.normalize_currency(e.currency) = p_currency
+    group by es.participant_id
+    union all
+    select sp.to_participant_id, sum(sp.amount_cents)::integer
+    from settlement_payments sp
+    where sp.group_id = p_group_id and sp.voided_at is null and sp.settlement_cycle_id is null and public.normalize_currency(sp.currency) = p_currency
+    group by sp.to_participant_id
+  ),
+  balances as (
+    select p.id,
+      coalesce((select sum(amount_cents) from paid where participant_id = p.id), 0)
+      - coalesce((select sum(amount_cents) from owed where participant_id = p.id), 0) as balance_cents
+    from participants p
+    where p.group_id = p_group_id
+  )
+  select exists (
+    select 1
+    from balances debtor
+    cross join balances creditor
+    where debtor.id = p_from_participant_id
+      and creditor.id = p_to_participant_id
+      and debtor.balance_cents < 0
+      and creditor.balance_cents > 0
+  );
+$$;
+
+create or replace function public.create_settlement_payment_by_token(
+  p_share_token text,
+  p_from_participant_id uuid,
+  p_to_participant_id uuid,
+  p_amount_cents integer,
+  p_currency text default 'ARS'
+)
+returns settlement_payments
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_member_group_id(p_share_token);
+  v_user_id uuid := auth.uid();
+  v_payment settlement_payments%rowtype;
+  v_currency text := public.normalize_currency(p_currency);
+begin
+  if v_user_id is null then raise exception 'Necesitas iniciar sesion.'; end if;
+  if p_amount_cents is null or p_amount_cents <= 0 then raise exception 'El monto tiene que ser mayor a 0.'; end if;
+  if p_from_participant_id = p_to_participant_id then raise exception 'El pago necesita dos participantes distintos.'; end if;
+  perform public.validate_currency(v_currency);
+  if not exists (select 1 from participants where group_id = v_group_id and id in (p_from_participant_id, p_to_participant_id) having count(*) = 2) then
+    raise exception 'Los participantes no pertenecen a este grupo.';
+  end if;
+  if not public.currency_has_pending_debt(v_group_id, v_currency, p_from_participant_id, p_to_participant_id) then
+    raise exception 'No encontramos una deuda pendiente en esa moneda.';
+  end if;
+
+  insert into settlement_payments (group_id, from_participant_id, to_participant_id, amount_cents, currency, created_by_auth_user_id)
+  values (v_group_id, p_from_participant_id, p_to_participant_id, p_amount_cents, v_currency, v_user_id)
+  returning * into v_payment;
+  perform public.log_group_activity(v_group_id, 'payment_created', 'settlement_payment', v_payment.id, jsonb_build_object('from_participant_id', p_from_participant_id, 'to_participant_id', p_to_participant_id, 'amount_cents', p_amount_cents, 'currency', v_currency));
+  return v_payment;
+end;
+$$;
+
+create or replace function public.assert_group_balanced_for_close(p_group_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_pending_count integer;
+begin
+  with currencies as (
+    select distinct public.normalize_currency(currency) as currency from expenses where group_id = p_group_id and settlement_cycle_id is null
+    union
+    select distinct public.normalize_currency(currency) as currency from settlement_payments where group_id = p_group_id and voided_at is null and settlement_cycle_id is null
+  ),
+  paid as (
+    select public.normalize_currency(e.currency) as currency, ep.participant_id, sum(ep.amount_cents)::integer as amount_cents
+    from expenses e join expense_payers ep on ep.expense_id = e.id
+    where e.group_id = p_group_id and e.settlement_cycle_id is null
+    group by public.normalize_currency(e.currency), ep.participant_id
+    union all
+    select public.normalize_currency(sp.currency), sp.from_participant_id, sum(sp.amount_cents)::integer
+    from settlement_payments sp
+    where sp.group_id = p_group_id and sp.voided_at is null and sp.settlement_cycle_id is null
+    group by public.normalize_currency(sp.currency), sp.from_participant_id
+  ),
+  owed as (
+    select public.normalize_currency(e.currency) as currency, es.participant_id, sum(es.amount_cents)::integer as amount_cents
+    from expenses e join expense_splits es on es.expense_id = e.id
+    where e.group_id = p_group_id and e.settlement_cycle_id is null
+    group by public.normalize_currency(e.currency), es.participant_id
+    union all
+    select public.normalize_currency(sp.currency), sp.to_participant_id, sum(sp.amount_cents)::integer
+    from settlement_payments sp
+    where sp.group_id = p_group_id and sp.voided_at is null and sp.settlement_cycle_id is null
+    group by public.normalize_currency(sp.currency), sp.to_participant_id
+  ),
+  balances as (
+    select c.currency, p.id,
+      coalesce((select sum(amount_cents) from paid where participant_id = p.id and currency = c.currency), 0)
+      - coalesce((select sum(amount_cents) from owed where participant_id = p.id and currency = c.currency), 0) as balance_cents
+    from currencies c
+    cross join participants p
+    where p.group_id = p_group_id
+  )
+  select count(*) into v_pending_count from balances where balance_cents <> 0;
+
+  if v_pending_count > 0 then
+    raise exception 'Para cerrar el periodo, primero salda todas las deudas pendientes.';
+  end if;
+end;
+$$;
+
+create or replace function public.close_cycle_by_token(p_share_token text)
+returns settlement_cycles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid := public.require_active_member_group_id(p_share_token);
+  v_cycle settlement_cycles%rowtype;
+begin
+  if not exists (select 1 from expenses where group_id = v_group_id and settlement_cycle_id is null) then
+    raise exception 'No hay gastos abiertos para cerrar.';
+  end if;
+  perform public.assert_group_balanced_for_close(v_group_id);
+
+  insert into settlement_cycles (group_id, title)
+  values (v_group_id, 'Cierre ' || to_char(now(), 'DD/MM/YYYY HH24:MI'))
+  returning * into v_cycle;
+
+  update expenses set settlement_cycle_id = v_cycle.id where group_id = v_group_id and settlement_cycle_id is null;
+  update settlement_payments set settlement_cycle_id = v_cycle.id where group_id = v_group_id and voided_at is null and settlement_cycle_id is null;
+  perform public.log_group_activity(v_group_id, 'period_closed', 'settlement_cycle', v_cycle.id, '{}'::jsonb);
+  return v_cycle;
+end;
+$$;
+
+grant execute on function normalize_currency(text) to authenticated;
+grant execute on function validate_currency(text) to authenticated;
+grant execute on function currency_has_pending_debt(uuid, text, uuid, uuid) to authenticated;
+grant execute on function assert_group_balanced_for_close(uuid) to authenticated;
+grant execute on function expense_with_lines_json(expenses) to authenticated;
+grant execute on function create_expense_by_token(text, text, integer, date, jsonb, jsonb, text, text, text) to authenticated;
+grant execute on function update_expense_by_token(text, uuid, text, integer, date, jsonb, jsonb, text, text, text) to authenticated;
+grant execute on function create_settlement_payment_by_token(text, uuid, uuid, integer, text) to authenticated;
+grant execute on function close_cycle_by_token(text) to authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
 -- EOF replay: alias profile + percentage split overrides.
 
 alter table public.participants

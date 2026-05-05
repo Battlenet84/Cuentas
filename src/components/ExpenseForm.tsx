@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import type { Expense, ExpensePayer, ExpenseSplit, Participant } from '../types';
+import type { CurrencyCode, Expense, ExpensePayer, ExpenseSplit, Participant } from '../types';
 import { todayInputValue } from '../lib/dates';
-import { formatARS, parseARSInput } from '../lib/money';
+import { formatARS, formatCurrencyAmount, normalizeCurrency, parseARSInput, supportedCurrencies } from '../lib/money';
 import { buildPercentageSplits, parsePercentageInput, percentageSum } from '../lib/percentageSplits';
 
 type ExpenseFormProps = {
@@ -42,6 +42,7 @@ export function ExpenseForm({
 
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState<CurrencyCode>('ARS');
   const [payerMode, setPayerMode] = useState<'single' | 'multiple'>('single');
   const [splitMode, setSplitMode] = useState<'equal' | 'manual' | 'percentage'>('equal');
   const [singlePayerId, setSinglePayerId] = useState('');
@@ -70,6 +71,7 @@ export function ExpenseForm({
       const defaultPayer = defaultPaidByParticipantId ?? activeParticipants[0]?.id ?? '';
       setTitle('');
       setAmount('');
+      setCurrency('ARS');
       setPayerMode('single');
       setSplitMode('equal');
       setSinglePayerId(defaultPayer);
@@ -89,6 +91,7 @@ export function ExpenseForm({
 
     setTitle(expense.title);
     setAmount(formatARS(expense.amountCents).replace('$', '').trim());
+    setCurrency(normalizeCurrency(expense.currency));
     setPayerMode(nextPayerMode);
     setSplitMode(nextSplitMode);
     setSinglePayerId(resolvedPayers[0]?.participantId ?? defaultPaidByParticipantId ?? '');
@@ -103,6 +106,7 @@ export function ExpenseForm({
   function resetForm() {
     setTitle('');
     setAmount('');
+    setCurrency('ARS');
     setPayerMode('single');
     setSplitMode('equal');
     setSinglePayerId(defaultPaidByParticipantId ?? activeParticipants[0]?.id ?? '');
@@ -223,6 +227,7 @@ export function ExpenseForm({
         groupId,
         title: title.trim(),
         amountCents: totalCents,
+        currency,
         paidByParticipantId: payers[0].participantId,
         splitParticipantIds: splits.map((split) => split.participantId),
         payerMode,
@@ -271,6 +276,17 @@ export function ExpenseForm({
             className="cc-input"
             placeholder="Supermercado, cena, nafta"
           />
+        </label>
+
+        <label className="grid gap-1 text-sm font-medium text-slate-700">
+          Moneda
+          <select value={currency} onChange={(event) => setCurrency(normalizeCurrency(event.target.value))} className="cc-input">
+            {supportedCurrencies.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="grid gap-1 text-sm font-medium text-slate-700">
@@ -327,7 +343,7 @@ export function ExpenseForm({
           </select>
         ) : (
           <div className="grid gap-2">
-            <ProgressLine currentCents={payerTotalCents} totalCents={amountCents} label="Pagado" />
+            <ProgressLine currentCents={payerTotalCents} totalCents={amountCents} currency={currency} label="Pagado" />
             {availableParticipants.map((participant) => (
               <MoneyRow
                 key={participant.id}
@@ -379,7 +395,7 @@ export function ExpenseForm({
           </div>
         ) : splitMode === 'manual' ? (
           <div className="grid gap-2">
-            <ProgressLine currentCents={splitTotalCents} totalCents={amountCents} label="Asignado" />
+            <ProgressLine currentCents={splitTotalCents} totalCents={amountCents} currency={currency} label="Asignado" />
             {availableParticipants.map((participant) => (
               <MoneyRow
                 key={participant.id}
@@ -417,6 +433,7 @@ export function ExpenseForm({
                   participant={participant}
                   value={splitPercentages[participant.id] ?? ''}
                   amountCents={splitAmount}
+                  currency={currency}
                   onChange={(value) => setParticipantAmount(setSplitPercentages, participant.id, value)}
                 />
               );
@@ -450,16 +467,16 @@ export function ExpenseForm({
   );
 }
 
-function ProgressLine({ currentCents, totalCents, label }: { currentCents: number; totalCents: number; label: string }) {
+function ProgressLine({ currentCents, totalCents, currency, label }: { currentCents: number; totalCents: number; currency: CurrencyCode; label: string }) {
   const difference = totalCents - currentCents;
   let detail = '';
-  if (totalCents > 0 && difference > 0) detail = `Faltan ${formatARS(difference)}`;
-  if (totalCents > 0 && difference < 0) detail = `Te pasaste por ${formatARS(Math.abs(difference))}`;
+  if (totalCents > 0 && difference > 0) detail = `Faltan ${formatCurrencyAmount(difference, currency)}`;
+  if (totalCents > 0 && difference < 0) detail = `Te pasaste por ${formatCurrencyAmount(Math.abs(difference), currency)}`;
   if (totalCents > 0 && difference === 0) detail = 'La suma coincide.';
 
   return (
     <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-      {label}: {formatARS(currentCents)} de {formatARS(totalCents)}
+      {label}: {formatCurrencyAmount(currentCents, currency)} de {formatCurrencyAmount(totalCents, currency)}
       {detail ? <span className="ml-1 font-medium text-slate-700">{detail}</span> : null}
     </p>
   );
@@ -507,11 +524,13 @@ function PercentageRow({
   participant,
   value,
   amountCents,
+  currency,
   onChange
 }: {
   participant: Participant;
   value: string;
   amountCents: number;
+  currency: CurrencyCode;
   onChange: (value: string) => void;
 }) {
   return (
@@ -525,7 +544,7 @@ function PercentageRow({
           inputMode="decimal"
           placeholder="0"
         />
-        <span className="w-24 text-right text-sm text-slate-500">{formatARS(amountCents)}</span>
+        <span className="w-24 text-right text-sm text-slate-500">{formatCurrencyAmount(amountCents, currency)}</span>
       </div>
     </label>
   );
