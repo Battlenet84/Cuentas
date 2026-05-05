@@ -87,7 +87,7 @@ export function ParticipantsManager({
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-900">Participantes</h2>
+        <h2 className="cc-section-title">Participantes</h2>
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input
             type="checkbox"
@@ -100,56 +100,56 @@ export function ParticipantsManager({
       </div>
       <p className="text-sm text-slate-600">Los participantes pueden existir aunque no tengan usuario.</p>
 
-      <form onSubmit={handleSubmit} className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3">
-        {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+      <form onSubmit={handleSubmit} className="cc-card grid gap-2">
+        {error ? <p className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
         <input
           value={name}
           onChange={(event) => setName(event.target.value)}
-          className="min-h-11 rounded-md border border-slate-300 px-3"
+          className="cc-input"
           placeholder="Nombre"
         />
         <input
           value={alias}
           onChange={(event) => setAlias(event.target.value)}
-          className="min-h-11 rounded-md border border-slate-300 px-3"
+          className="cc-input"
           placeholder="Alias opcional"
         />
-        <button type="submit" className="min-h-11 rounded-md bg-slate-900 px-4 font-medium text-white">
+        <button type="submit" className="cc-button-primary">
           Agregar participante
         </button>
       </form>
 
       <div className="grid gap-2">
         {visibleParticipants.length === 0 ? (
-          <p className="rounded-lg bg-white p-4 text-sm text-slate-500">Agrega participantes para empezar.</p>
+          <p className="cc-card text-sm text-slate-500">Agrega participantes para empezar.</p>
         ) : (
           visibleParticipants.map((participant) => (
-            <div key={participant.id} className="rounded-lg border border-slate-200 bg-white p-3">
+            <div key={participant.id} className="cc-card-soft">
               {editingId === participant.id ? (
                 <div className="grid gap-2">
                   <input
                     value={editName}
                     onChange={(event) => setEditName(event.target.value)}
-                    className="min-h-11 rounded-md border border-slate-300 px-3"
+                    className="cc-input"
                   />
                   <input
                     value={editAlias}
                     onChange={(event) => setEditAlias(event.target.value)}
-                    className="min-h-11 rounded-md border border-slate-300 px-3"
+                    className="cc-input"
                     placeholder="Alias opcional"
                   />
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => void saveEdit(participant)}
-                      className="rounded-md bg-teal-700 px-3 py-2 text-sm font-medium text-white"
+                      className="cc-button-primary"
                     >
                       Guardar
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditingId(null)}
-                      className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                      className="cc-button-secondary"
                     >
                       Cancelar
                     </button>
@@ -169,7 +169,7 @@ export function ParticipantsManager({
                     <button
                       type="button"
                       onClick={() => startEdit(participant)}
-                      className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                      className="cc-button-secondary"
                     >
                       Editar
                     </button>
@@ -177,7 +177,7 @@ export function ParticipantsManager({
                       <button
                         type="button"
                         onClick={() => void handleRemove(participant)}
-                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                        className="cc-button-ghost"
                       >
                         Desactivar
                       </button>
@@ -189,7 +189,7 @@ export function ParticipantsManager({
                             .then(() => setError(null))
                             .catch(() => setError('No se pudo guardar el participante.'))
                         }
-                        className="rounded-md bg-teal-700 px-3 py-2 text-sm font-medium text-white"
+                        className="cc-button-primary"
                       >
                         Reactivar
                       </button>

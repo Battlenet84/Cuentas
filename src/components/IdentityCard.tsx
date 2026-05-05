@@ -38,27 +38,27 @@ export function IdentityCard({ membership, participants, onChangeIdentity, onCre
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4">
+    <section className="cc-card">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">Tu identidad en este grupo</h2>
+          <h2 className="cc-section-title">Mi identidad</h2>
           <p className="mt-1 text-sm text-slate-600">
             {currentParticipant ? `Entraste como ${currentParticipant.name}` : 'Todavía no elegiste quién sos en este grupo.'}
           </p>
           {currentParticipant?.alias ? <p className="mt-1 text-sm text-slate-500">Alias: {currentParticipant.alias}</p> : null}
         </div>
-        <button type="button" onClick={() => setIsEditing((value) => !value)} className="text-sm font-semibold text-teal-800">
+        <button type="button" onClick={() => setIsEditing((value) => !value)} className="cc-button-ghost">
           Cambiar
         </button>
       </div>
 
       {isEditing ? (
         <form onSubmit={handleSubmit} className="mt-4 grid gap-3">
-          {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+          {error ? <p className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
           <select
             value={participantId}
             onChange={(event) => setParticipantId(event.target.value)}
-            className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+            className="cc-input"
           >
             <option value="">Crear nuevo participante</option>
             {activeParticipants.map((participant) => (
@@ -72,18 +72,18 @@ export function IdentityCard({ membership, participants, onChangeIdentity, onCre
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+                className="cc-input"
                 placeholder="Nombre"
               />
               <input
                 value={alias}
                 onChange={(event) => setAlias(event.target.value)}
-                className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+                className="cc-input"
                 placeholder="Alias opcional"
               />
             </>
           ) : null}
-          <button type="submit" className="min-h-11 rounded-md bg-teal-700 px-4 font-semibold text-white">
+          <button type="submit" className="cc-button-primary">
             Guardar identidad
           </button>
         </form>

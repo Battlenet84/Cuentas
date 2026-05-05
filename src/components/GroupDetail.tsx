@@ -251,13 +251,13 @@ export function GroupDetail({
     if (activeTab === 'summary') {
       return (
         <div className="space-y-5">
-          <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2">
-            <div>
-              <p className="text-sm text-slate-500">Total gastado</p>
+          <section className="grid gap-3 sm:grid-cols-2">
+            <div className="cc-card-soft">
+              <p className="text-sm font-medium text-slate-500">Total gastado</p>
               <p className="mt-1 text-2xl font-semibold text-slate-950">{formatARS(totalOpenCents)}</p>
             </div>
-            <div>
-              <p className="text-sm text-slate-500">Pendiente por saldar</p>
+            <div className="cc-card-soft">
+              <p className="text-sm font-medium text-slate-500">Pendiente por saldar</p>
               <p className="mt-1 text-2xl font-semibold text-slate-950">
                 {pendingSettlementCents > 0 ? formatARS(pendingSettlementCents) : 'Todo saldado'}
               </p>
@@ -269,7 +269,7 @@ export function GroupDetail({
           <button
             type="button"
             onClick={handleCopySummary}
-            className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-4 font-medium text-slate-800"
+            className="cc-button-secondary w-full"
           >
             Copiar resumen
           </button>
@@ -316,12 +316,12 @@ export function GroupDetail({
           profile={profile ?? null}
           onSave={onUpdateMyGroupProfile}
         />
-        <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="font-semibold text-slate-900">Acceso al grupo</h2>
+        <section className="cc-card grid gap-3">
+          <h2 className="cc-section-title">Acceso al grupo</h2>
           <button
             type="button"
             onClick={handleCopyGroupLink}
-            className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
+            className="cc-button-secondary"
           >
             Copiar link de invitacion
           </button>
@@ -329,37 +329,37 @@ export function GroupDetail({
             <button
               type="button"
               onClick={handleRegenerateInvite}
-              className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
+              className="cc-button-secondary"
             >
               Regenerar link de invitacion
             </button>
           ) : null}
-          <p className="text-sm text-slate-600">Las personas con link deberan solicitar acceso.</p>
-          {isOwner ? <p className="text-sm text-slate-600">Las solicitudes se aprueban desde Personas.</p> : null}
+          <p className="cc-muted">Las personas con link deberan solicitar acceso.</p>
+          {isOwner ? <p className="cc-muted">Las solicitudes se aprueban desde Personas.</p> : null}
         </section>
 
-        <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="font-semibold text-slate-900">Gestion del periodo</h2>
+        <section className="cc-card grid gap-3">
+          <h2 className="cc-section-title">Gestion del periodo</h2>
           <button
             type="button"
             onClick={handleClose}
             disabled={openExpenses.length === 0 || pendingSettlementCents > 0}
-            className="min-h-11 rounded-md bg-slate-900 px-4 font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="cc-button-primary disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             Cerrar periodo
           </button>
           {pendingSettlementCents > 0 ? (
-            <p className="text-sm text-slate-600">Solo podes cerrar el periodo cuando el saldo este en cero.</p>
+            <p className="cc-muted">Solo podes cerrar el periodo cuando el saldo este en cero.</p>
           ) : null}
         </section>
 
-        <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="font-semibold text-slate-900">Datos y mantenimiento</h2>
+        <section className="cc-card grid gap-3">
+          <h2 className="cc-section-title">Datos y mantenimiento</h2>
           {onManualRefresh ? (
             <button
               type="button"
               onClick={onManualRefresh}
-              className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
+              className="cc-button-secondary"
             >
               Actualizar datos
             </button>
@@ -367,24 +367,24 @@ export function GroupDetail({
           <button
             type="button"
             onClick={onBack}
-            className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
+            className="cc-button-secondary"
           >
             Volver a Mis grupos
           </button>
         </section>
 
-        <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="font-semibold text-slate-900">Cuenta</h2>
+        <section className="cc-card grid gap-3">
+          <h2 className="cc-section-title">Cuenta</h2>
           {onSignOut ? (
             <button
               type="button"
               onClick={onSignOut}
-              className="min-h-11 rounded-md border border-slate-300 px-4 font-medium text-slate-800"
+              className="cc-button-secondary"
             >
               Cerrar sesion
             </button>
           ) : (
-            <p className="text-sm text-slate-500">No hay acciones de cuenta en modo local.</p>
+            <p className="cc-muted">No hay acciones de cuenta en modo local.</p>
           )}
         </section>
       </div>
@@ -394,14 +394,14 @@ export function GroupDetail({
   return (
     <div className="min-h-screen pb-28 md:pb-0">
       <div className="space-y-5">
-        <header className="rounded-lg bg-slate-900 p-4 text-white md:p-5">
+        <header className="rounded-2xl bg-slate-950 p-4 text-white shadow-lg shadow-slate-200 md:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs text-slate-300">Grupo</p>
               <h1 className="mt-1 text-xl font-semibold md:text-2xl">{group.name}</h1>
               {syncStatus === 'error' ? <p className="mt-2 text-xs text-slate-300">No se pudo sincronizar.</p> : null}
             </div>
-            <button type="button" onClick={handleCopyGroupLink} className="text-xs font-semibold text-teal-100">
+            <button type="button" onClick={handleCopyGroupLink} className="rounded-lg px-2 py-1 text-xs font-semibold text-teal-100 hover:bg-white/10">
               Copiar link
             </button>
           </div>
@@ -415,19 +415,19 @@ export function GroupDetail({
           <button
             type="button"
             onClick={openCreateExpensePanel}
-            className="hidden min-h-10 rounded-md bg-teal-700 px-4 font-semibold text-white md:inline-flex md:items-center"
+            className="cc-button-primary hidden md:inline-flex md:items-center"
           >
             Agregar gasto
           </button>
         </div>
 
-        {copyStatus ? <p className="text-sm text-slate-600">{copyStatus}</p> : null}
+        {copyStatus ? <p className="rounded-xl border border-teal-100 bg-teal-50 px-4 py-3 text-sm font-medium text-teal-800">{copyStatus}</p> : null}
 
         {errorMessage ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             <p>{errorMessage}</p>
             {onRetry ? (
-              <button type="button" onClick={onRetry} className="mt-2 font-semibold text-red-800">
+              <button type="button" onClick={onRetry} className="mt-2 font-semibold text-red-800 underline-offset-4 hover:underline">
                 Reintentar
               </button>
             ) : null}
@@ -443,7 +443,7 @@ export function GroupDetail({
 
       {isExpensePanelOpen ? (
         <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 p-0 sm:items-center sm:justify-center sm:p-4">
-          <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:max-w-xl sm:rounded-xl">
+          <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-4 shadow-xl sm:max-w-xl sm:rounded-2xl">
             {expenseForm}
           </div>
         </div>

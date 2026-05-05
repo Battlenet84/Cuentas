@@ -65,14 +65,15 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center bg-slate-50 px-4 py-6">
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <p className="text-sm font-medium text-teal-700">Cuentas Claras</p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-950">
+    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-6">
+      <section className="cc-card p-5">
+        <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">Cuentas Claras</p>
+        <h1 className="mt-2 text-3xl font-semibold text-slate-950">
           {mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Crear cuenta' : 'Recuperar contrasena'}
         </h1>
+        <p className="mt-2 text-sm text-slate-600">Dividi gastos de grupos sin vueltas.</p>
         {mode !== 'recovery' ? (
-        <div className="mt-4 grid grid-cols-2 gap-2 rounded-md bg-slate-100 p-1">
+        <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
           <button
             type="button"
             onClick={() => {
@@ -80,7 +81,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
               setError(null);
               setSuccessMessage(null);
             }}
-            className={`min-h-10 rounded px-3 text-sm font-semibold ${mode === 'login' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600'}`}
+            className={`min-h-10 rounded-lg px-3 text-sm font-semibold transition ${mode === 'login' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
           >
             Entrar
           </button>
@@ -91,7 +92,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
               setError(null);
               setSuccessMessage(null);
             }}
-            className={`min-h-10 rounded px-3 text-sm font-semibold ${mode === 'signup' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600'}`}
+            className={`min-h-10 rounded-lg px-3 text-sm font-semibold transition ${mode === 'signup' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
           >
             Crear cuenta
           </button>
@@ -102,8 +103,8 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
           </p>
         )}
         <form onSubmit={handleSubmit} className="mt-4 grid gap-3">
-          {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-          {successMessage ? <p className="rounded-md bg-teal-50 p-3 text-sm text-teal-800">{successMessage}</p> : null}
+          {error ? <p className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+          {successMessage ? <p className="rounded-lg border border-teal-100 bg-teal-50 p-3 text-sm text-teal-800">{successMessage}</p> : null}
           {mode === 'signup' ? (
             <>
               <label className="grid gap-1 text-sm font-medium text-slate-700">
@@ -111,7 +112,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
                 <input
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
-                  className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+                  className="cc-input"
                   autoComplete="name"
                 />
               </label>
@@ -122,7 +123,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
                 <input
                   value={paymentAlias}
                   onChange={(event) => setPaymentAlias(event.target.value)}
-                  className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+                  className="cc-input"
                   placeholder="Ej: flor.mp"
                 />
               </label>
@@ -134,7 +135,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+              className="cc-input"
               autoComplete="email"
             />
           </label>
@@ -145,7 +146,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+              className="cc-input"
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             />
           </label>
@@ -153,7 +154,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
           <button
             type="submit"
             disabled={isSubmitting}
-            className="min-h-11 rounded-md bg-teal-700 px-4 font-semibold text-white disabled:bg-slate-300"
+            className="cc-button-primary"
           >
             {isSubmitting
               ? 'Procesando...'
@@ -174,7 +175,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
                   setError(null);
                   setSuccessMessage(null);
                 }}
-                className="text-sm font-semibold text-teal-800"
+                className="cc-button-ghost"
               >
                 Crear cuenta
               </button>
@@ -185,7 +186,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
                   setError(null);
                   setSuccessMessage(null);
                 }}
-                className="text-sm font-semibold text-slate-700"
+                className="rounded-lg px-2 py-1 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
               >
                 Olvide mi contrasena
               </button>
@@ -198,7 +199,7 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
                 setError(null);
                 setSuccessMessage(null);
               }}
-              className="text-sm font-semibold text-teal-800"
+              className="cc-button-ghost"
             >
               {mode === 'signup' ? 'Ya tengo cuenta' : 'Volver a entrar'}
             </button>

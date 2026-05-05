@@ -172,7 +172,7 @@ export function GroupMovements({
       <input
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        className="min-h-11 w-full rounded-md border border-slate-300 px-3 text-base"
+        className="cc-input w-full"
         placeholder="Buscar movimiento"
       />
       <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
@@ -195,7 +195,7 @@ export function GroupMovements({
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
-        <select value={participantFilter} onChange={(event) => setParticipantFilter(event.target.value)} className="min-h-11 rounded-md border border-slate-300 px-3 text-base">
+        <select value={participantFilter} onChange={(event) => setParticipantFilter(event.target.value)} className="cc-input">
           <option value="all">Participante: Todos</option>
           {participants.map((participant) => (
             <option key={participant.id} value={participant.id}>
@@ -203,7 +203,7 @@ export function GroupMovements({
             </option>
           ))}
         </select>
-        <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as DateFilter)} className="min-h-11 rounded-md border border-slate-300 px-3 text-base">
+        <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as DateFilter)} className="cc-input">
           <option value="all">Fecha: Todas</option>
           <option value="today">Hoy</option>
           <option value="last7">Ultimos 7 dias</option>
@@ -211,13 +211,13 @@ export function GroupMovements({
         </select>
       </div>
 
-      {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
 
       {movementGroups.length === 0 ? (
         <div className="space-y-3">
           <EmptyState title={emptyTitle()} />
           {(query.trim() || participantFilter !== 'all' || dateFilter !== 'all') ? (
-            <button type="button" onClick={resetFilters} className="min-h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700">
+            <button type="button" onClick={resetFilters} className="cc-button-secondary">
               Limpiar filtros
             </button>
           ) : null}
@@ -324,7 +324,7 @@ function ExpenseMovementCard({
   onDeleteExpense: (expense: Expense) => void;
 }) {
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+    <article className="cc-card-soft">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs text-slate-500">{formatDate(expense.date)}</p>
@@ -337,13 +337,13 @@ function ExpenseMovementCard({
         <p>{splitModeLabel(expense.splitMode)}</p>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" onClick={() => onViewDetail(expense)} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700">
+        <button type="button" onClick={() => onViewDetail(expense)} className="cc-button-ghost">
           Ver detalle
         </button>
-        <button type="button" onClick={() => onEditExpense(expense)} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700">
+        <button type="button" onClick={() => onEditExpense(expense)} className="cc-button-ghost">
           Editar
         </button>
-        <button type="button" onClick={() => void onDeleteExpense(expense)} className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-700">
+        <button type="button" onClick={() => void onDeleteExpense(expense)} className="cc-button-danger">
           Eliminar
         </button>
       </div>
@@ -367,7 +367,7 @@ function PaymentMovementCard({
   const isVoided = Boolean(payment.voidedAt);
 
   return (
-    <article className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm ${isVoided ? 'opacity-70' : ''}`}>
+    <article className={`cc-card-soft ${isVoided ? 'opacity-70' : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs text-slate-500">{new Date(payment.createdAt).toLocaleDateString('es-AR')}</p>
@@ -381,7 +381,7 @@ function PaymentMovementCard({
       {isVoided ? (
         <p className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">Pago anulado</p>
       ) : onVoid ? (
-        <button type="button" onClick={() => onVoid(payment.id)} className="mt-3 rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700">
+        <button type="button" onClick={() => onVoid(payment.id)} className="cc-button-danger mt-3">
           Anular
         </button>
       ) : null}
@@ -400,7 +400,7 @@ function ActivityMovementCard({
   const text = activityText(activity, actor, participantName);
 
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+    <article className="cc-card-soft">
       <p className="text-xs text-slate-500">{new Date(activity.createdAt).toLocaleDateString('es-AR')}</p>
       <h3 className="mt-1 text-sm font-semibold text-slate-900">{text}</h3>
     </article>
@@ -505,14 +505,14 @@ function CycleMovementCard({
   onViewDetail: (cycle: SettlementCycle) => void;
 }) {
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+    <article className="cc-card-soft">
       <h3 className="font-semibold text-slate-900">{cycle.title}</h3>
       <p className="mt-1 text-sm text-slate-500">
         {new Date(cycle.closedAt).toLocaleDateString('es-AR')}
         {closedExpenseCount > 0 ? ` - ${closedExpenseCount} gastos` : ''}
         {closedPaymentCount > 0 ? ` - ${closedPaymentCount} pagos` : ''}
       </p>
-      <button type="button" onClick={() => onViewDetail(cycle)} className="mt-3 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
+      <button type="button" onClick={() => onViewDetail(cycle)} className="cc-button-secondary mt-3">
         Ver detalle
       </button>
     </article>
@@ -548,13 +548,13 @@ function ExpenseDetailSheet({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4">
-      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:max-w-lg sm:rounded-xl">
+      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-4 shadow-xl sm:max-w-lg sm:rounded-2xl">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm text-slate-500">{formatDate(expense.date)}</p>
             <h2 className="mt-1 text-xl font-semibold text-slate-950">{expense.title}</h2>
           </div>
-          <button type="button" onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold">
+          <button type="button" onClick={onClose} className="cc-button-ghost">
             Cerrar
           </button>
         </div>
@@ -591,10 +591,10 @@ function ExpenseDetailSheet({
           })}
         </section>
         <div className="mt-5 flex flex-wrap gap-2">
-          <button type="button" onClick={() => onEdit(expense)} className="rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white">
+          <button type="button" onClick={() => onEdit(expense)} className="cc-button-primary">
             Editar
           </button>
-          <button type="button" onClick={() => onDelete(expense)} className="rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700">
+          <button type="button" onClick={() => onDelete(expense)} className="cc-button-danger">
             Eliminar
           </button>
         </div>
@@ -626,13 +626,13 @@ function CycleDetailSheet({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4">
-      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:max-w-lg sm:rounded-xl">
+      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-4 shadow-xl sm:max-w-lg sm:rounded-2xl">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm text-slate-500">{new Date(cycle.closedAt).toLocaleDateString('es-AR')}</p>
             <h2 className="mt-1 text-xl font-semibold text-slate-950">{cycle.title}</h2>
           </div>
-          <button type="button" onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold">
+          <button type="button" onClick={onClose} className="cc-button-ghost">
             Cerrar
           </button>
         </div>

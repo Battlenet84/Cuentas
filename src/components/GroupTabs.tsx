@@ -15,14 +15,14 @@ const tabs: Array<{ id: GroupTab; label: string }> = [
 export function GroupTabs({ activeTab, onTabChange }: GroupTabsProps) {
   return (
     <nav className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0" aria-label="Secciones del grupo">
-      <div className="flex min-w-max gap-2 rounded-lg bg-white p-1 shadow-sm md:inline-flex">
+      <div className="flex min-w-max gap-1 rounded-xl border border-slate-200 bg-white/90 p-1 shadow-sm md:inline-flex">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onTabChange(tab.id)}
-            className={`min-h-10 rounded-md px-4 text-sm font-semibold ${
-              activeTab === tab.id ? 'bg-teal-700 text-white' : 'text-slate-600'
+            className={`min-h-10 rounded-lg px-4 text-sm font-semibold transition ${
+              activeTab === tab.id ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
             {tab.label}

@@ -250,21 +250,25 @@ export function ExpenseForm({
   }
 
   if (activeParticipants.length === 0 && !expense) {
-    return <p className="rounded-lg bg-white p-4 text-sm text-slate-500">Agrega participantes activos antes de cargar gastos.</p>;
+    return <p className="cc-card text-sm text-slate-500">Agrega participantes activos antes de cargar gastos.</p>;
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4">
-      <h2 className="text-base font-semibold text-slate-900">{expense ? 'Editar gasto' : 'Agregar gasto'}</h2>
-      {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+    <form onSubmit={handleSubmit} className="grid gap-4">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-950">{expense ? 'Editar gasto' : 'Agregar gasto'}</h2>
+        <p className="cc-muted mt-1">Completa los datos y revisa que las sumas cierren.</p>
+      </div>
+      {error ? <p className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
 
-      <section className="grid gap-3">
+      <section className="cc-card-soft grid gap-3">
+        <h3 className="cc-section-title">Datos del gasto</h3>
         <label className="grid gap-1 text-sm font-medium text-slate-700">
           Nombre del gasto
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+            className="cc-input"
             placeholder="Supermercado, cena, nafta"
           />
         </label>
@@ -274,7 +278,7 @@ export function ExpenseForm({
           <input
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
-            className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+            className="cc-input"
             inputMode="decimal"
             placeholder="12.500,00"
           />
@@ -286,21 +290,21 @@ export function ExpenseForm({
             type="date"
             value={date}
             onChange={(event) => setDate(event.target.value)}
-            className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+            className="cc-input"
           />
         </label>
       </section>
 
-      <section className="grid gap-3">
+      <section className="cc-card-soft grid gap-3">
         <div>
-          <p className="text-sm font-semibold text-slate-900">Quien pago</p>
-          <div className="mt-2 grid grid-cols-2 gap-2 rounded-md bg-slate-100 p-1">
+          <p className="cc-section-title">Quien pago</p>
+          <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
             {(['single', 'multiple'] as const).map((mode) => (
               <button
                 key={mode}
                 type="button"
                 onClick={() => setPayerMode(mode)}
-                className={`min-h-10 rounded px-3 text-sm font-semibold ${payerMode === mode ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600'}`}
+                className={`min-h-10 rounded-lg px-3 text-sm font-semibold transition ${payerMode === mode ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
               >
                 {mode === 'single' ? 'Una persona' : 'Varias personas'}
               </button>
@@ -312,7 +316,7 @@ export function ExpenseForm({
           <select
             value={singlePayerId}
             onChange={(event) => setSinglePayerId(event.target.value)}
-            className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+            className="cc-input"
           >
             <option value="">Seleccionar</option>
             {availableParticipants.map((participant) => (
@@ -336,16 +340,16 @@ export function ExpenseForm({
         )}
       </section>
 
-      <section className="grid gap-3">
+      <section className="cc-card-soft grid gap-3">
         <div>
-          <p className="text-sm font-semibold text-slate-900">Como se divide</p>
-          <div className="mt-2 grid grid-cols-2 gap-2 rounded-md bg-slate-100 p-1">
+          <p className="cc-section-title">Como se divide</p>
+          <div className="mt-2 grid gap-2 rounded-xl bg-slate-100 p-1 sm:grid-cols-3">
             {(['equal', 'manual', 'percentage'] as const).map((mode) => (
               <button
                 key={mode}
                 type="button"
                 onClick={() => setSplitMode(mode)}
-                className={`min-h-10 rounded px-3 text-sm font-semibold ${splitMode === mode ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600'}`}
+                className={`min-h-10 rounded-lg px-3 text-sm font-semibold transition ${splitMode === mode ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
               >
                 {mode === 'equal' ? 'Partes iguales' : mode === 'manual' ? 'Montos manuales' : 'Por porcentaje'}
               </button>
@@ -356,12 +360,12 @@ export function ExpenseForm({
         {splitMode === 'equal' ? (
           <div className="grid gap-2">
             <div className="flex gap-2">
-              <button type="button" onClick={selectAllSplits} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium">
+              <button type="button" onClick={selectAllSplits} className="cc-button-ghost">
                 {areAllActiveSplitsSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
               </button>
             </div>
             {availableParticipants.map((participant) => (
-              <label key={participant.id} className="flex min-h-11 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm">
+              <label key={participant.id} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm">
                 <input
                   type="checkbox"
                   checked={equalSplitIds.includes(participant.id)}
@@ -392,14 +396,14 @@ export function ExpenseForm({
               <button
                 type="button"
                 onClick={() => setSplitPercentages(splitPercentagesEqually(availableParticipants.map((participant) => participant.id)))}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium"
+                className="cc-button-ghost"
               >
                 Dividir en partes iguales
               </button>
               <button
                 type="button"
                 onClick={() => setSplitPercentages({})}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium"
+                className="cc-button-ghost"
               >
                 Limpiar porcentajes
               </button>
@@ -421,11 +425,13 @@ export function ExpenseForm({
         )}
       </section>
 
-      <div className="grid gap-2 sm:grid-cols-2">
+      <section className="cc-card-soft grid gap-3">
+        <h3 className="cc-section-title">Guardar</h3>
+        <div className="grid gap-2 sm:grid-cols-2">
         <button
           type="submit"
           disabled={isSubmitting}
-          className="min-h-11 rounded-md bg-teal-700 px-4 font-medium text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="cc-button-primary disabled:cursor-not-allowed disabled:bg-slate-300"
         >
           {isSubmitting ? 'Guardando...' : expense ? 'Guardar cambios' : 'Guardar gasto'}
         </button>
@@ -433,12 +439,13 @@ export function ExpenseForm({
           <button
             type="button"
             onClick={onCancel}
-            className="min-h-11 rounded-md border border-slate-300 bg-white px-4 font-medium text-slate-800"
+            className="cc-button-secondary"
           >
             Cancelar
           </button>
         ) : null}
-      </div>
+        </div>
+      </section>
     </form>
   );
 }
@@ -451,7 +458,7 @@ function ProgressLine({ currentCents, totalCents, label }: { currentCents: numbe
   if (totalCents > 0 && difference === 0) detail = 'La suma coincide.';
 
   return (
-    <p className="text-sm text-slate-600">
+    <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
       {label}: {formatARS(currentCents)} de {formatARS(totalCents)}
       {detail ? <span className="ml-1 font-medium text-slate-700">{detail}</span> : null}
     </p>
@@ -466,7 +473,7 @@ function PercentageProgress({ current }: { current: number }) {
   if (Math.abs(difference) < 0.001) detail = 'La suma coincide.';
 
   return (
-    <p className="text-sm text-slate-600">
+    <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
       Asignado: {formatPercentage(current)} de 100%
       <span className="ml-1 font-medium text-slate-700">{detail}</span>
     </p>
@@ -488,7 +495,7 @@ function MoneyRow({
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+        className="cc-input"
         inputMode="decimal"
         placeholder="0,00"
       />
@@ -514,7 +521,7 @@ function PercentageRow({
         <input
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="min-h-11 flex-1 rounded-md border border-slate-300 px-3 text-base"
+        className="cc-input flex-1"
           inputMode="decimal"
           placeholder="0"
         />

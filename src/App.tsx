@@ -637,8 +637,8 @@ function App() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 px-4 py-6">
-        <main className="mx-auto max-w-3xl rounded-lg bg-white p-5 shadow-sm">
+      <div className="min-h-screen px-4 py-6">
+        <main className="cc-card mx-auto max-w-3xl">
           <p className="font-medium text-slate-800">Preparando identidad anónima...</p>
         </main>
       </div>
@@ -647,8 +647,8 @@ function App() {
 
   if (authError) {
     return (
-      <div className="min-h-screen bg-slate-50 px-4 py-6">
-        <main className="mx-auto max-w-3xl rounded-lg border border-red-200 bg-red-50 p-5 text-red-800">
+      <div className="min-h-screen px-4 py-6">
+        <main className="mx-auto max-w-3xl rounded-xl border border-red-200 bg-red-50 p-5 text-red-800 shadow-sm">
           <p className="font-medium">{authError}</p>
         </main>
       </div>
@@ -665,8 +665,8 @@ function App() {
 
   if (isLoadingGroup) {
     return (
-      <div className="min-h-screen bg-slate-50 px-4 py-6">
-        <main className="mx-auto max-w-3xl rounded-lg bg-white p-5 shadow-sm">
+      <div className="min-h-screen px-4 py-6">
+        <main className="cc-card mx-auto max-w-3xl">
           <p className="font-medium text-slate-800">Cargando grupo...</p>
         </main>
       </div>
@@ -689,12 +689,12 @@ function App() {
 
   if (route.kind === 'sharedGroup' && selectedGroup && state.accessStatus === 'pending') {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center bg-slate-50 px-4 py-6">
-        <section className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-amber-900">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-4 py-6">
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-900 shadow-sm">
           <p className="text-sm font-semibold text-amber-700">Cuentas Claras</p>
           <h1 className="mt-2 text-xl font-semibold">Solicitud enviada</h1>
           <p className="mt-2 text-sm">Un administrador tiene que aprobar tu acceso.</p>
-          <button type="button" onClick={openHome} className="mt-4 font-semibold text-amber-950">
+          <button type="button" onClick={openHome} className="cc-button-secondary mt-4">
             Volver al inicio
           </button>
         </section>
@@ -704,10 +704,10 @@ function App() {
 
   if (route.kind === 'sharedGroup' && state.accessStatus === 'revoked') {
     return (
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center bg-slate-50 px-4 py-6">
-        <section className="rounded-lg border border-red-200 bg-red-50 p-5 text-red-800">
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-4 py-6">
+        <section className="rounded-xl border border-red-200 bg-red-50 p-5 text-red-800 shadow-sm">
           <h1 className="text-xl font-semibold">Tu acceso a este grupo fue revocado.</h1>
-          <button type="button" onClick={openHome} className="mt-4 font-semibold text-red-900">
+          <button type="button" onClick={openHome} className="cc-button-secondary mt-4">
             Volver al inicio
           </button>
         </section>
@@ -717,7 +717,7 @@ function App() {
 
   if (selectedGroup) {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen">
         <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
           <GroupDetail
             group={selectedGroup}
@@ -762,19 +762,17 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen">
       <main className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6">
-        <header>
+        <header className="pt-2">
           <p className="text-sm font-medium uppercase tracking-wide text-teal-700">Cuentas Claras</p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-950">Grupos para dividir gastos</h1>
-          <p className="mt-2 text-slate-600">
-            Creá grupos permanentes, cargá gastos con el tiempo y mirá cómo saldar cuentas.
-          </p>
+          <h1 className="mt-2 text-3xl font-semibold text-slate-950">Tus grupos</h1>
+          <p className="mt-2 text-slate-600">Carga gastos, mira saldos y cerra cuentas sin vueltas.</p>
         </header>
 
         {!isSupabaseConfigured ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
-            Modo local activo. Para compartir grupos entre celulares configurá Supabase.
+            Modo local activo. Para compartir grupos entre celulares configura Supabase.
           </p>
         ) : null}
 
@@ -782,9 +780,9 @@ function App() {
           <button
             type="button"
             onClick={() => void handleSignOut()}
-            className="self-start rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
+            className="cc-button-ghost self-start"
           >
-            Cerrar sesión
+            Cerrar sesion
           </button>
         ) : null}
 
@@ -799,6 +797,8 @@ function App() {
           </div>
         ) : null}
 
+        {isSupabaseConfigured ? <ProfileCard profile={profile} onSave={handleSaveProfile} /> : null}
+
         <CreateGroupForm
           onCreate={(input) => void handleCreateGroup(input)}
           requiresOwnerName={isSupabaseConfigured}
@@ -806,8 +806,7 @@ function App() {
           defaultOwnerAlias={profile?.paymentAlias ?? ''}
         />
         {isSaving ? <p className="text-sm font-medium text-slate-600">Guardando cambios...</p> : null}
-        {isSupabaseConfigured ? <ProfileCard profile={profile} onSave={handleSaveProfile} /> : null}
-        {isSupabaseConfigured ? <h2 className="text-lg font-semibold text-slate-900">Mis grupos</h2> : null}
+        {isSupabaseConfigured ? <h2 className="cc-section-title">Mis grupos</h2> : null}
         <GroupList groups={state.groups} participants={state.participants} onOpenGroup={openLocalGroup} />
       </main>
     </div>

@@ -76,17 +76,17 @@ export function MembersManager({
 
   return (
     <section className="space-y-5">
-      {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-      {message ? <p className="rounded-md bg-teal-50 p-3 text-sm text-teal-800">{message}</p> : null}
+      {error ? <p className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+      {message ? <p className="rounded-xl border border-teal-100 bg-teal-50 p-3 text-sm text-teal-800">{message}</p> : null}
 
       <div className="space-y-2">
-        <h2 className="text-base font-semibold text-slate-900">Miembros con acceso</h2>
+        <h2 className="cc-section-title">Miembros con acceso</h2>
         <div className="grid gap-2">
           {activeMembers.length === 0 ? (
-            <p className="rounded-lg bg-white p-4 text-sm text-slate-500">Todavia no hay miembros activos.</p>
+            <p className="cc-card text-sm text-slate-500">Todavia no hay miembros activos.</p>
           ) : (
             activeMembers.map((member) => (
-              <div key={member.id} className="rounded-lg border border-slate-200 bg-white p-3">
+              <div key={member.id} className="cc-card-soft">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-medium text-slate-900">{memberName(member)}</p>
@@ -102,7 +102,7 @@ export function MembersManager({
                       <button
                         type="button"
                         onClick={() => void run(() => onPromoteMember(member.id), 'Rol actualizado.', 'No se pudo hacer owner.')}
-                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                        className="cc-button-secondary"
                       >
                         Hacer owner
                       </button>
@@ -111,7 +111,7 @@ export function MembersManager({
                       <button
                         type="button"
                         onClick={() => void handleDemote(member)}
-                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                        className="cc-button-secondary"
                       >
                         Quitar owner
                       </button>
@@ -119,7 +119,7 @@ export function MembersManager({
                     <button
                       type="button"
                       onClick={() => void handleRevoke(member)}
-                      className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-700"
+                      className="cc-button-danger"
                     >
                       Revocar acceso
                     </button>
@@ -133,27 +133,27 @@ export function MembersManager({
 
       {isOwner ? (
         <div className="space-y-2">
-          <h2 className="text-base font-semibold text-slate-900">Solicitudes pendientes</h2>
+          <h2 className="cc-section-title">Solicitudes pendientes</h2>
           <div className="grid gap-2">
             {pendingMembers.length === 0 ? (
-              <p className="rounded-lg bg-white p-4 text-sm text-slate-500">No hay solicitudes pendientes.</p>
+              <p className="cc-card text-sm text-slate-500">No hay solicitudes pendientes.</p>
             ) : (
               pendingMembers.map((member) => (
-                <div key={member.id} className="rounded-lg border border-amber-200 bg-white p-3">
+                <div key={member.id} className="rounded-xl border border-amber-200 bg-white p-3 shadow-sm">
                   <p className="font-medium text-slate-900">{memberName(member)}</p>
                   <p className="text-sm text-slate-500">{member.participantAlias ? `Alias: ${member.participantAlias}` : 'Sin alias cargado'}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => void run(() => onApproveMember?.(member.id) ?? Promise.resolve(), 'Solicitud aprobada.', 'No se pudo aprobar.')}
-                      className="rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white"
+                      className="cc-button-primary"
                     >
                       Aprobar
                     </button>
                     <button
                       type="button"
                       onClick={() => void run(() => onRejectMember?.(member.id) ?? Promise.resolve(), 'Solicitud rechazada.', 'No se pudo rechazar.')}
-                      className="rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700"
+                      className="cc-button-danger"
                     >
                       Rechazar
                     </button>
@@ -167,13 +167,13 @@ export function MembersManager({
 
       {isOwner ? (
         <div className="space-y-2">
-          <h2 className="text-base font-semibold text-slate-900">Accesos revocados</h2>
+          <h2 className="cc-section-title">Accesos revocados</h2>
           <div className="grid gap-2">
             {revokedMembers.length === 0 ? (
-              <p className="rounded-lg bg-white p-4 text-sm text-slate-500">No hay accesos revocados.</p>
+              <p className="cc-card text-sm text-slate-500">No hay accesos revocados.</p>
             ) : (
               revokedMembers.map((member) => (
-                <div key={member.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                <div key={member.id} className="cc-card-soft">
                   <p className="font-medium text-slate-900">{memberName(member)}</p>
                   <p className="text-sm text-slate-500">Revocado · {formatDateTime(member.lastSeenAt)}</p>
                 </div>
@@ -184,7 +184,7 @@ export function MembersManager({
       ) : null}
 
       {isOwner && duplicateMembers.length > 0 ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 shadow-sm">
           <h2 className="font-semibold">Posibles duplicados</h2>
           <p className="mt-1">Hay mas de una membresia activa asociada al mismo participante.</p>
         </div>

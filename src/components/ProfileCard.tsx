@@ -34,29 +34,29 @@ export function ProfileCard({ profile, onSave }: ProfileCardProps) {
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="cc-card">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Mi perfil</h2>
+          <h2 className="cc-section-title">Mi perfil</h2>
           <p className="mt-2 text-sm text-slate-600">Nombre predeterminado: {profile?.displayName || 'Sin nombre predeterminado'}</p>
           <p className="mt-1 text-sm text-slate-600">Alias predeterminado: {profile?.paymentAlias || 'Sin alias predeterminado'}</p>
         </div>
-        <button type="button" onClick={() => setIsEditing((value) => !value)} className="text-sm font-semibold text-teal-800">
+        <button type="button" onClick={() => setIsEditing((value) => !value)} className="cc-button-ghost">
           Editar perfil
         </button>
       </div>
       {isEditing ? (
         <form onSubmit={handleSubmit} className="mt-4 grid gap-3">
-          {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+          {error ? <p className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
           <label className="grid gap-1 text-sm font-medium text-slate-700">
             Nombre predeterminado
-            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} className="min-h-11 rounded-md border border-slate-300 px-3 text-base" />
+            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} className="cc-input" />
           </label>
           <label className="grid gap-1 text-sm font-medium text-slate-700">
             Alias predeterminado
-            <input value={paymentAlias} onChange={(event) => setPaymentAlias(event.target.value)} className="min-h-11 rounded-md border border-slate-300 px-3 text-base" placeholder="Ej: flor.mp" />
+            <input value={paymentAlias} onChange={(event) => setPaymentAlias(event.target.value)} className="cc-input" placeholder="Ej: flor.mp" />
           </label>
-          <button type="submit" disabled={isSaving} className="min-h-11 rounded-md bg-teal-700 px-4 font-semibold text-white disabled:bg-slate-300">
+          <button type="submit" disabled={isSaving} className="cc-button-primary">
             {isSaving ? 'Guardando...' : 'Guardar cambios'}
           </button>
         </form>

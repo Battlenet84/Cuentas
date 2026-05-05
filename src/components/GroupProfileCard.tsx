@@ -48,27 +48,27 @@ export function GroupProfileCard({ membership, participants, profile, onSave }: 
         : 'Alias manual';
 
   return (
-    <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4">
+    <section className="cc-card grid gap-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-slate-900">Mis datos en este grupo</h2>
+          <h2 className="cc-section-title">Mis datos en este grupo</h2>
           <p className="mt-2 text-sm text-slate-600">Participante asociado: {participant.name}</p>
           <p className="text-sm text-slate-600">Nombre en este grupo: {participant.name}</p>
           <p className="text-sm text-slate-600">Alias en este grupo: {participant.alias || 'Sin alias'}</p>
           <p className="text-sm text-slate-500">{sourceText}</p>
         </div>
         {onSave ? (
-          <button type="button" onClick={() => setIsEditing((value) => !value)} className="text-sm font-semibold text-teal-800">
+          <button type="button" onClick={() => setIsEditing((value) => !value)} className="cc-button-ghost">
             Editar mis datos
           </button>
         ) : null}
       </div>
       {isEditing ? (
         <form onSubmit={handleSubmit} className="grid gap-3">
-          {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+          {error ? <p className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
           <label className="grid gap-1 text-sm font-medium text-slate-700">
             Nombre en este grupo
-            <input value={name} onChange={(event) => setName(event.target.value)} className="min-h-11 rounded-md border border-slate-300 px-3 text-base" />
+            <input value={name} onChange={(event) => setName(event.target.value)} className="cc-input" />
           </label>
           <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
             <input type="checkbox" checked={useProfileAlias} onChange={(event) => setUseProfileAlias(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
@@ -77,12 +77,12 @@ export function GroupProfileCard({ membership, participants, profile, onSave }: 
           {!useProfileAlias ? (
             <label className="grid gap-1 text-sm font-medium text-slate-700">
               Alias en este grupo
-              <input value={alias} onChange={(event) => setAlias(event.target.value)} className="min-h-11 rounded-md border border-slate-300 px-3 text-base" placeholder="Ej: flor.mp" />
+              <input value={alias} onChange={(event) => setAlias(event.target.value)} className="cc-input" placeholder="Ej: flor.mp" />
             </label>
           ) : (
             <p className="text-sm text-slate-600">Se usara: {profile?.paymentAlias || 'Sin alias predeterminado'}</p>
           )}
-          <button type="submit" className="min-h-11 rounded-md bg-teal-700 px-4 font-semibold text-white">
+          <button type="submit" className="cc-button-primary">
             Guardar cambios
           </button>
         </form>

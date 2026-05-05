@@ -39,18 +39,21 @@ export function CreateGroupForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <label className="block text-sm font-medium text-slate-700" htmlFor="group-name">
+    <form onSubmit={handleSubmit} className="cc-card grid gap-3">
+      <div>
+        <h2 className="cc-section-title">Crear grupo</h2>
+        <p className="cc-muted mt-1">Arma un espacio para cargar gastos y saldar cuentas.</p>
+      </div>
+      <label className="grid gap-1 text-sm font-medium text-slate-700" htmlFor="group-name">
         Nombre del grupo
-      </label>
-      <div className="mt-2 grid gap-2">
         <input
           id="group-name"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          className="min-h-11 flex-1 rounded-md border border-slate-300 px-3 text-base"
+          className="cc-input"
           placeholder="Cena viernes, viaje, casa compartida"
         />
+      </label>
         {requiresOwnerName ? (
           <>
             <label className="grid gap-1 text-sm font-medium text-slate-700" htmlFor="owner-name">
@@ -59,7 +62,7 @@ export function CreateGroupForm({
                 id="owner-name"
                 value={ownerParticipantName}
                 onChange={(event) => setOwnerParticipantName(event.target.value)}
-                className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+                className="cc-input"
                 placeholder="Flor"
               />
             </label>
@@ -69,7 +72,7 @@ export function CreateGroupForm({
                 id="owner-alias"
                 value={ownerParticipantAlias}
                 onChange={(event) => setOwnerParticipantAlias(event.target.value)}
-                className="min-h-11 rounded-md border border-slate-300 px-3 text-base"
+                className="cc-input"
                 placeholder="Ej: flor.mp"
               />
             </label>
@@ -77,11 +80,10 @@ export function CreateGroupForm({
         ) : null}
         <button
           type="submit"
-          className="min-h-11 rounded-md bg-teal-700 px-4 font-medium text-white hover:bg-teal-800"
+          className="cc-button-primary"
         >
           Crear grupo
         </button>
-      </div>
     </form>
   );
 }
