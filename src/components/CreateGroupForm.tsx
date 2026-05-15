@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Icon } from './ui';
+import { Field, Icon, TextInput } from './ui';
 
 type CreateGroupFormProps = {
   onCreate: (input: { name: string; ownerParticipantName: string; ownerParticipantAlias?: string; ownerAliasSource?: 'profile' | 'custom' }) => void;
+  onCancel?: () => void;
   requiresOwnerName?: boolean;
   defaultOwnerName?: string;
   defaultOwnerAlias?: string;
@@ -10,6 +11,7 @@ type CreateGroupFormProps = {
 
 export function CreateGroupForm({
   onCreate,
+  onCancel,
   requiresOwnerName = false,
   defaultOwnerName = '',
   defaultOwnerAlias = ''
@@ -50,43 +52,44 @@ export function CreateGroupForm({
           <p className="cc-muted mt-1">Cena, viaje, casa compartida. Empeza con un nombre y despues invitas al resto.</p>
         </div>
       </div>
-      <label className="grid gap-1 text-sm font-medium text-slate-700" htmlFor="group-name">
-        Nombre del grupo
-        <input
+      <Field label="Nombre del grupo">
+        <TextInput
           id="group-name"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          className="cc-input"
           placeholder="Cena viernes, viaje, casa compartida"
         />
-      </label>
+      </Field>
         {requiresOwnerName ? (
           <>
-            <label className="grid gap-1 text-sm font-medium text-slate-700" htmlFor="owner-name">
-              Tu nombre en este grupo
-              <input
+            <Field label="Tu nombre en este grupo">
+              <TextInput
                 id="owner-name"
                 value={ownerParticipantName}
                 onChange={(event) => setOwnerParticipantName(event.target.value)}
-                className="cc-input"
                 placeholder="Flor"
               />
-            </label>
-            <label className="grid gap-1 text-sm font-medium text-slate-700" htmlFor="owner-alias">
-              Alias de pago <span className="font-normal text-slate-500">Opcional</span>
-              <input
+            </Field>
+            <Field label={<span>Alias de pago <span className="font-normal text-slate-500">Opcional</span></span>}>
+              <TextInput
                 id="owner-alias"
                 value={ownerParticipantAlias}
                 onChange={(event) => setOwnerParticipantAlias(event.target.value)}
-                className="cc-input"
                 placeholder="Ej: flor.mp"
               />
-            </label>
+            </Field>
           </>
         ) : null}
-        <button type="submit" className="cc-button-primary w-full">
-          Crear grupo
-        </button>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {onCancel ? (
+            <button type="button" onClick={onCancel} className="cc-button-secondary">
+              Cancelar
+            </button>
+          ) : null}
+          <button type="submit" className="cc-button-primary w-full">
+            Crear grupo
+          </button>
+        </div>
     </form>
   );
 }

@@ -10,7 +10,7 @@ type GroupListProps = {
 
 export function GroupList({ groups, participants, onOpenGroup }: GroupListProps) {
   if (groups.length === 0) {
-    return <EmptyState title="Todavia no tenes grupos." description="Crea uno o entra con un link de invitacion." />;
+    return <EmptyState icon="users" title="Todavia no tenes grupos" description="Crea uno o entra con un link de invitacion." />;
   }
 
   return (

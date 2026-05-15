@@ -177,3 +177,27 @@ export function simplifySettlementsByCurrency(
     ])
   ) as Partial<Record<CurrencyCode, Settlement[]>>;
 }
+
+export type SettlementWithStatus = {
+  settlement: Settlement;
+  paidCents: number;
+  remainingCents: number;
+};
+
+export function computeSettlementStatus(
+  settlements: Settlement[],
+  payments: SettlementPayment[]
+): SettlementWithStatus[] {
+  const openPayments = getOpenSettlementPayments(payments);
+  const paidMap = new Map<string, number>();
+  for (const payment of openPayments) {
+    const key = `${payment.fromParticipantId}:${payment.toParticipantId}:${normalizeCurrency(payment.currency)}`;
+    paidMap.set(key, (paidMap.get(key) ?? 0) + payment.amountCents);
+  }
+
+  return settlements.map((settlement) => {
+    const key = `${settlement.fromParticipantId}:${settlement.toParticipantId}:${normalizeCurrency(settlement.currency)}`;
+    const paidCents = Math.min(paidMap.get(key) ?? 0, settlement.amountCents);
+    return { settlement, paidCents, remainingCents: settlement.amountCents - paidCents };
+  });
+}

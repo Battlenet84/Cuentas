@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react';
 import type { Group, Participant } from '../types';
+import { Avatar, Field, Logo, TextInput } from './ui';
 
 type JoinGroupCardProps = {
   group: Group;
@@ -64,11 +65,13 @@ export function JoinGroupCard({
   }
 
   return (
-    <main className="cc-app mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-4 px-4 py-6">
+    <main className="cc-app mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-6 px-5 py-8">
+      <header>
+        <Logo />
+        <h1 className="serif mt-7 text-[2rem] font-semibold leading-tight tracking-[-0.025em] text-slate-950">{group.name}</h1>
+        <p className="mt-2 text-[15px] leading-6 text-slate-700">Elegi quien sos o crea un participante nuevo. Un owner tiene que aprobar tu acceso.</p>
+      </header>
       <section className="cc-card p-5">
-        <p className="text-sm font-medium text-teal-700">Cuentas Claras</p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-950">Solicitar acceso a {group.name}</h1>
-        <p className="mt-2 text-sm text-slate-600">Elegi quien sos en este grupo o crea un participante nuevo.</p>
 
         {error ? <p className="cc-banner cc-banner-error mt-4">{error}</p> : null}
 
@@ -80,9 +83,10 @@ export function JoinGroupCard({
                 type="button"
                 disabled={isJoining || claimedIds.has(participant.id)}
                 onClick={() => handleExistingJoin(participant.id)}
-                className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 text-left font-medium text-slate-800 shadow-sm disabled:opacity-60"
+                className="flex min-h-12 items-center gap-3 rounded-xl border border-slate-300 bg-white px-3 text-left font-medium text-slate-800 shadow-sm disabled:opacity-60"
               >
-                {participant.name}
+                <Avatar name={participant.name} size={30} />
+                <span className="flex-1">{participant.name}</span>
                 {claimedIds.has(participant.id) ? (
                   <span className="ml-2 text-sm font-normal text-slate-500">Ya esta asociado o pendiente.</span>
                 ) : null}
@@ -92,22 +96,19 @@ export function JoinGroupCard({
         ) : null}
 
         <form onSubmit={handleSubmit} className="mt-4 grid gap-3">
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
-            Crear participante nuevo
-            <input
+          <Field label="Crear participante nuevo">
+            <TextInput
               value={name}
               onChange={(event) => {
                 setName(event.target.value);
                 setSelectedParticipantId('');
               }}
-              className="cc-input"
               placeholder="Tu nombre"
             />
-          </label>
-          <input
+          </Field>
+          <TextInput
             value={alias}
             onChange={(event) => setAlias(event.target.value)}
-            className="cc-input"
             placeholder="Alias opcional"
           />
           <button

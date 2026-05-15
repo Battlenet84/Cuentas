@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 import type { Expense, Participant } from '../types';
 import { Avatar, Badge, SettingsBlock } from './ui';
+import { EmptyState } from './EmptyState';
 
 type ParticipantsManagerProps = {
   groupId: string;
@@ -122,7 +123,9 @@ export function ParticipantsManager({
 
       <SettingsBlock title="Lista" sub={`${visibleParticipants.length} visibles`}>
         {visibleParticipants.length === 0 ? (
-          <p className="p-3 text-sm text-slate-500">Agrega participantes para empezar.</p>
+          <div className="p-3">
+            <EmptyState icon="users" title="Sin participantes" description="Agrega participantes para empezar a cargar gastos." />
+          </div>
         ) : (
           visibleParticipants.map((participant) => (
             <div key={participant.id} className="cc-row">

@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { Logo } from './ui';
+import { Field, Logo, SegmentedControl, TextInput } from './ui';
 
 type AuthScreenProps = {
   onSignIn: (email: string, password: string) => Promise<void>;
@@ -79,30 +79,19 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
         </header>
 
         {mode !== 'recovery' ? (
-        <div className="grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('login');
+          <SegmentedControl
+            value={mode}
+            onChange={(next) => {
+              setMode(next);
               setError(null);
               setSuccessMessage(null);
             }}
-            className={`min-h-10 rounded-lg px-3 text-sm font-semibold transition ${mode === 'login' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            Entrar
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode('signup');
-              setError(null);
-              setSuccessMessage(null);
-            }}
-            className={`min-h-10 rounded-lg px-3 text-sm font-semibold transition ${mode === 'signup' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            Crear cuenta
-          </button>
-        </div>
+            options={[
+              { value: 'login', label: 'Entrar' },
+              { value: 'signup', label: 'Crear cuenta' }
+            ]}
+            className="grid-cols-2"
+          />
         ) : (
           <p className="text-sm text-slate-600">
             Ingresa tu email y te enviamos instrucciones para restablecer tu contrasena.
@@ -114,49 +103,45 @@ export function AuthScreen({ onSignIn, onSignUp, onResetPassword }: AuthScreenPr
           {successMessage ? <p className="cc-banner cc-banner-success">{successMessage}</p> : null}
           {mode === 'signup' ? (
             <>
-              <label className="grid gap-1 text-sm font-medium text-slate-700">
-                Nombre
-                <input
+              <Field label="Nombre">
+                <TextInput
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
-                  className="cc-input"
                   autoComplete="name"
                 />
-              </label>
-              <label className="grid gap-1 text-sm font-medium text-slate-700">
+              </Field>
+              <Field
+                label={
                 <span>
                   Alias de pago <span className="font-normal text-slate-500">Opcional</span>
                 </span>
-                <input
+                }
+              >
+                <TextInput
                   value={paymentAlias}
                   onChange={(event) => setPaymentAlias(event.target.value)}
-                  className="cc-input"
                   placeholder="Ej: flor.mp"
                 />
-              </label>
+              </Field>
             </>
           ) : null}
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
-            Email
-            <input
+          <Field label="Email">
+            <TextInput
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="cc-input"
               autoComplete="email"
             />
-          </label>
+          </Field>
           {mode !== 'recovery' ? (
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
-            Contrasena
-            <input
+          <Field label="Contrasena">
+            <TextInput
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="cc-input"
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             />
-          </label>
+          </Field>
           ) : null}
           <button type="submit" disabled={isSubmitting} className="cc-button-primary mt-1 w-full">
             {isSubmitting

@@ -4,6 +4,7 @@ import { copyToClipboard } from '../lib/clipboard';
 import { openMercadoPago } from '../lib/mercadoPago';
 import { useState } from 'react';
 import { Avatar, Icon, SectionHeader } from './ui';
+import { ConfirmDialog } from './ConfirmDialog';
 
 type SettlementListProps = {
   settlements: Settlement[];
@@ -14,6 +15,8 @@ type SettlementListProps = {
 export function SettlementList({ settlements, participants, onSettle }: SettlementListProps) {
   const [error, setError] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const [pendingSettle, setPendingSettle] = useState<Settlement | null>(null);
+
   function participant(id: string): Participant | undefined {
     return participants.find((item) => item.id === id);
   }
@@ -22,13 +25,11 @@ export function SettlementList({ settlements, participants, onSettle }: Settleme
     return participant(id)?.name ?? 'Participante';
   }
 
-  async function handleSettle(settlement: Settlement) {
-    const from = participantName(settlement.fromParticipantId);
-    const to = participantName(settlement.toParticipantId);
-    const confirmed = window.confirm(`Confirmas que ${from} le pago ${formatCurrencyAmount(settlement.amountCents, settlement.currency)} a ${to}?`);
-    if (!confirmed) return;
+  async function confirmSettle() {
+    if (!pendingSettle) return;
     try {
-      await onSettle?.(settlement);
+      await onSettle?.(pendingSettle);
+      setPendingSettle(null);
       setError(null);
     } catch (error) {
       console.error('No se pudo registrar el pago.', error);
@@ -139,7 +140,7 @@ export function SettlementList({ settlements, participants, onSettle }: Settleme
                   {onSettle ? (
                     <button
                       type="button"
-                      onClick={() => void handleSettle(settlement)}
+                        onClick={() => setPendingSettle(settlement)}
                       className="cc-button-primary ml-auto min-h-9 px-3 text-xs"
                     >
                       Saldar
@@ -151,6 +152,18 @@ export function SettlementList({ settlements, participants, onSettle }: Settleme
           })}
         </div>
       )}
+      <ConfirmDialog
+        isOpen={Boolean(pendingSettle)}
+        title="Confirmar pago"
+        description={
+          pendingSettle
+            ? `Confirmas que ${participantName(pendingSettle.fromParticipantId)} le pago ${formatCurrencyAmount(pendingSettle.amountCents, pendingSettle.currency)} a ${participantName(pendingSettle.toParticipantId)}?`
+            : ''
+        }
+        confirmLabel="Si, saldar"
+        onConfirm={confirmSettle}
+        onCancel={() => setPendingSettle(null)}
+      />
     </section>
   );
 }

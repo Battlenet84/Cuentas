@@ -3,7 +3,7 @@ import type { CurrencyCode, Expense, ExpensePayer, ExpenseSplit, Participant } f
 import { todayInputValue } from '../lib/dates';
 import { formatARS, formatCurrencyAmount, normalizeCurrency, parseARSInput, supportedCurrencies } from '../lib/money';
 import { buildPercentageSplits, parsePercentageInput, percentageSum } from '../lib/percentageSplits';
-import { Avatar, Badge, Icon } from './ui';
+import { Avatar, Badge, Field, Icon, SegmentedControl, SelectField, TextInput } from './ui';
 
 type ExpenseFormProps = {
   groupId: string;
@@ -272,72 +272,62 @@ export function ExpenseForm({
 
       <section className="grid gap-3">
         <h3 className="cc-section-h">Datos del gasto</h3>
-        <label className="grid gap-1 text-sm font-medium text-slate-700">
-          Que fue
-          <input
+        <Field label="Que fue">
+          <TextInput
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            className="cc-input"
             placeholder="Supermercado, cena, nafta"
           />
-        </label>
+        </Field>
 
         <div className="grid grid-cols-[1fr_104px] gap-2">
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
-            Total
-            <input
+          <Field label="Total">
+            <TextInput
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
               className="cc-input num min-h-16 text-2xl font-semibold tracking-[-0.02em]"
               inputMode="decimal"
               placeholder="12.500,00"
             />
-          </label>
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
-            Moneda
-            <select value={currency} onChange={(event) => setCurrency(normalizeCurrency(event.target.value))} className="cc-input min-h-16">
+          </Field>
+          <Field label="Moneda">
+            <SelectField value={currency} onChange={(event) => setCurrency(normalizeCurrency(event.target.value))} className="min-h-16">
               {supportedCurrencies.map((item) => (
                 <option key={item} value={item}>
                   {item}
                 </option>
               ))}
-            </select>
-          </label>
+            </SelectField>
+          </Field>
         </div>
 
-        <label className="grid gap-1 text-sm font-medium text-slate-700">
-          Fecha
-          <input
+        <Field label="Fecha">
+          <TextInput
             type="date"
             value={date}
             onChange={(event) => setDate(event.target.value)}
-            className="cc-input"
           />
-        </label>
+        </Field>
       </section>
 
       <section className="grid gap-3">
         <div>
           <p className="cc-section-h">Quien pago</p>
-          <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-slate-100 p-1">
-            {(['single', 'multiple'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setPayerMode(mode)}
-                className={`min-h-10 rounded-lg px-3 text-sm font-semibold transition ${payerMode === mode ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                {mode === 'single' ? 'Una persona' : 'Varias personas'}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            value={payerMode}
+            onChange={setPayerMode}
+            options={[
+              { value: 'single', label: 'Una persona' },
+              { value: 'multiple', label: 'Varias personas' }
+            ]}
+            className="mt-2 grid-cols-2"
+          />
         </div>
 
         {payerMode === 'single' ? (
-          <select
+          <SelectField
             value={singlePayerId}
             onChange={(event) => setSinglePayerId(event.target.value)}
-            className="cc-input"
           >
             <option value="">Seleccionar</option>
             {availableParticipants.map((participant) => (
@@ -345,7 +335,7 @@ export function ExpenseForm({
                 {participant.name}
               </option>
             ))}
-          </select>
+          </SelectField>
         ) : (
           <div className="grid gap-2">
             <ProgressLine currentCents={payerTotalCents} totalCents={amountCents} currency={currency} label="Pagado" />
@@ -364,18 +354,16 @@ export function ExpenseForm({
       <section className="grid gap-3">
         <div>
           <p className="cc-section-h">Como se divide</p>
-          <div className="mt-2 grid gap-2 rounded-2xl border border-slate-200 bg-slate-100 p-1 sm:grid-cols-3">
-            {(['equal', 'manual', 'percentage'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setSplitMode(mode)}
-                className={`min-h-10 rounded-lg px-3 text-sm font-semibold transition ${splitMode === mode ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                {mode === 'equal' ? 'Partes iguales' : mode === 'manual' ? 'Montos manuales' : 'Por porcentaje'}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            value={splitMode}
+            onChange={setSplitMode}
+            options={[
+              { value: 'equal', label: 'Partes iguales' },
+              { value: 'manual', label: 'Montos manuales' },
+              { value: 'percentage', label: 'Por porcentaje' }
+            ]}
+            className="mt-2 sm:grid-cols-3"
+          />
         </div>
 
         {splitMode === 'equal' ? (
@@ -448,7 +436,7 @@ export function ExpenseForm({
         )}
       </section>
 
-      <section className="cc-card grid gap-3 p-4">
+      <section className="sticky bottom-0 z-10 -mx-5 mt-2 grid gap-3 border-t border-slate-200 bg-[var(--cc-bg)] px-5 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-3 shadow-[0_-12px_28px_rgba(60,40,20,0.10)]">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="cc-section-h">Resumen</h3>

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
 
 type IconName =
   | 'arrow-r'
@@ -139,4 +139,70 @@ export function MoneyDisplay({ value, label, subdued = false }: { value: string;
 
 export function SheetHandle() {
   return <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-[var(--cc-line-strong)]" />;
+}
+
+export function Field({ label, helper, children }: { label?: ReactNode; helper?: ReactNode; children: ReactNode }) {
+  return (
+    <label className="grid gap-1 text-sm font-medium text-slate-700">
+      {label ? <span>{label}</span> : null}
+      {children}
+      {helper ? <span className="text-xs font-normal text-slate-500">{helper}</span> : null}
+    </label>
+  );
+}
+
+export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
+  return <input {...props} className={`cc-input ${props.className ?? ''}`} />;
+}
+
+export function SelectField({ className = '', children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <div className="relative">
+      <select {...props} className={`cc-input appearance-none pr-10 ${className}`}>
+        {children}
+      </select>
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+        <Icon name="arrow-r" size={14} className="rotate-90" />
+      </span>
+    </div>
+  );
+}
+
+export function SegmentedControl<T extends string>({
+  value,
+  options,
+  onChange,
+  className = ''
+}: {
+  value: T;
+  options: Array<{ value: T; label: ReactNode }>;
+  onChange: (value: T) => void;
+  className?: string;
+}) {
+  return (
+    <div className={`grid gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1 ${className}`} role="tablist">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          role="tab"
+          aria-selected={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={`min-h-10 rounded-xl px-3 text-sm font-semibold transition ${
+            value === option.value ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function ChipButton({ active, children, onClick }: { active?: boolean; children: ReactNode; onClick?: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className={`cc-pill min-h-9 shadow-sm transition ${active ? 'cc-chip-active' : ''}`}>
+      {children}
+    </button>
+  );
 }

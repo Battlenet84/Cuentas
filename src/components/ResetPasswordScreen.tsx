@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { updatePassword } from '../data/auth';
+import { Field, Logo, TextInput } from './ui';
 
 type ResetPasswordScreenProps = {
   onDone: () => void;
@@ -41,13 +42,16 @@ export function ResetPasswordScreen({ onDone }: ResetPasswordScreenProps) {
   }
 
   return (
-    <main className="cc-app mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-6">
-      <section className="cc-card p-5">
-        <p className="text-sm font-medium text-teal-700">Cuentas Claras</p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-950">Restablecer contrasena</h1>
+    <main className="cc-app mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-8">
+      <section className="grid gap-6">
+        <header>
+          <Logo />
+          <h1 className="serif mt-7 text-[2rem] font-semibold leading-tight tracking-[-0.025em] text-slate-950">Restablecer contrasena</h1>
+          <p className="mt-2 text-[15px] leading-6 text-slate-700">Elegi una nueva contrasena para volver a entrar a la app.</p>
+        </header>
 
         {isUpdated ? (
-          <div className="mt-4 grid gap-4">
+          <div className="cc-card grid gap-4 p-5">
             <p className="cc-banner cc-banner-success">
               Contrasena actualizada correctamente.
             </p>
@@ -60,28 +64,24 @@ export function ResetPasswordScreen({ onDone }: ResetPasswordScreenProps) {
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="mt-4 grid gap-3">
+          <form onSubmit={handleSubmit} className="cc-card grid gap-4 p-5">
             {error ? <p className="cc-banner cc-banner-error">{error}</p> : null}
-            <label className="grid gap-1 text-sm font-medium text-slate-700">
-              Nueva contrasena
-              <input
+            <Field label="Nueva contrasena">
+              <TextInput
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="cc-input"
                 autoComplete="new-password"
               />
-            </label>
-            <label className="grid gap-1 text-sm font-medium text-slate-700">
-              Repetir contrasena
-              <input
+            </Field>
+            <Field label="Repetir contrasena">
+              <TextInput
                 type="password"
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
-                className="cc-input"
                 autoComplete="new-password"
               />
-            </label>
+            </Field>
             <button
               type="submit"
               disabled={isSubmitting}

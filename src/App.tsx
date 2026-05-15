@@ -6,7 +6,8 @@ import { JoinGroupCard } from './components/JoinGroupCard';
 import { AuthScreen } from './components/AuthScreen';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { ProfileCard } from './components/ProfileCard';
-import { Logo } from './components/ui';
+import { EmptyState } from './components/EmptyState';
+import { Icon, Logo, SheetHandle } from './components/ui';
 import {
   assignSettlementCycleToExpenses,
   createExpense,
@@ -95,6 +96,8 @@ function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMemberView[]>([]);
   const [syncStatus, setSyncStatus] = useState<RealtimeStatus>('idle');
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
   const realtimeRefreshTimeoutRef = useRef<number | null>(null);
   const isRealtimeRefreshingRef = useRef(false);
   const isExpensePanelOpenRef = useRef(false);
@@ -692,14 +695,12 @@ function App() {
   if (route.kind === 'sharedGroup' && selectedGroup && state.accessStatus === 'pending') {
     return (
       <main className="cc-app mx-auto flex min-h-screen max-w-xl flex-col justify-center px-4 py-6">
-        <section className="cc-card p-5">
-          <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">Cuentas Claras</p>
-          <h1 className="mt-2 text-xl font-semibold">Solicitud enviada</h1>
-          <p className="mt-2 text-sm">Un administrador tiene que aprobar tu acceso.</p>
-          <button type="button" onClick={openHome} className="cc-button-secondary mt-4">
-            Volver al inicio
-          </button>
-        </section>
+        <EmptyState
+          icon="lock"
+          title="Solicitud enviada"
+          description="Un owner tiene que aprobar tu acceso para entrar al grupo."
+          action={<button type="button" onClick={openHome} className="cc-button-secondary">Volver al inicio</button>}
+        />
       </main>
     );
   }
@@ -707,12 +708,12 @@ function App() {
   if (route.kind === 'sharedGroup' && state.accessStatus === 'revoked') {
     return (
       <main className="cc-app mx-auto flex min-h-screen max-w-xl flex-col justify-center px-4 py-6">
-        <section className="cc-banner cc-banner-error p-5">
-          <h1 className="text-xl font-semibold">Tu acceso a este grupo fue revocado.</h1>
-          <button type="button" onClick={openHome} className="cc-button-secondary mt-4">
-            Volver al inicio
-          </button>
-        </section>
+        <EmptyState
+          icon="lock"
+          title="Acceso revocado"
+          description="Ya no tenes acceso a este grupo."
+          action={<button type="button" onClick={openHome} className="cc-button-secondary">Volver al inicio</button>}
+        />
       </main>
     );
   }
@@ -768,16 +769,54 @@ function App() {
       <main className="mx-auto flex max-w-3xl flex-col gap-5 px-5 py-5 sm:px-6">
         <header className="flex items-center justify-between gap-3 pt-1">
           <Logo compact />
-          {isSupabaseConfigured ? (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => void handleSignOut()}
+              onClick={() => setShowInstallGuide((v) => !v)}
               className="cc-button-ghost px-2 text-xs"
+              aria-expanded={showInstallGuide}
             >
-              Cerrar sesion
+              {showInstallGuide ? 'Cerrar' : 'Instalar app'}
             </button>
-          ) : null}
+            {isSupabaseConfigured ? (
+              <button
+                type="button"
+                onClick={() => void handleSignOut()}
+                className="cc-button-ghost px-2 text-xs"
+              >
+                Cerrar sesion
+              </button>
+            ) : null}
+          </div>
         </header>
+
+        {showInstallGuide ? (
+          <div className="cc-card space-y-4 p-5">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Cómo tener la app en tu celu</p>
+              <p className="mt-1 text-xs text-slate-500">Sin descargar nada — funciona como app nativa desde el navegador.</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Android (Chrome)</p>
+              <ol className="mt-2 space-y-1.5 text-sm text-slate-700">
+                <li className="flex gap-2"><span className="font-semibold text-slate-400">1.</span> Abrí Chrome y entrá a esta página</li>
+                <li className="flex gap-2"><span className="font-semibold text-slate-400">2.</span> Tocá el menú <span className="rounded bg-slate-100 px-1 font-mono text-xs">⋮</span> arriba a la derecha</li>
+                <li className="flex gap-2"><span className="font-semibold text-slate-400">3.</span> Elegí <span className="font-semibold">"Agregar a pantalla de inicio"</span></li>
+                <li className="flex gap-2"><span className="font-semibold text-slate-400">4.</span> Confirmá y listo</li>
+              </ol>
+            </div>
+            <div className="h-px bg-slate-100" />
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">iPhone / iPad (Safari)</p>
+              <ol className="mt-2 space-y-1.5 text-sm text-slate-700">
+                <li className="flex gap-2"><span className="font-semibold text-slate-400">1.</span> Abrí Safari y entrá a esta página</li>
+                <li className="flex gap-2"><span className="font-semibold text-slate-400">2.</span> Tocá el botón de compartir <span className="rounded bg-slate-100 px-1 font-mono text-xs">□↑</span> abajo</li>
+                <li className="flex gap-2"><span className="font-semibold text-slate-400">3.</span> Elegí <span className="font-semibold">"Agregar a Inicio"</span></li>
+                <li className="flex gap-2"><span className="font-semibold text-slate-400">4.</span> Confirmá y listo</li>
+              </ol>
+            </div>
+          </div>
+        ) : null}
 
         <section className="pt-3">
           <h1 className="serif text-3xl font-semibold tracking-[-0.025em] text-slate-950">
@@ -809,16 +848,46 @@ function App() {
 
         {isSupabaseConfigured ? <ProfileCard profile={profile} onSave={handleSaveProfile} /> : null}
 
-        <CreateGroupForm
-          onCreate={(input) => void handleCreateGroup(input)}
-          requiresOwnerName={isSupabaseConfigured}
-          defaultOwnerName={profile?.displayName ?? ''}
-          defaultOwnerAlias={profile?.paymentAlias ?? ''}
-        />
         {isSaving ? <p className="text-sm font-medium text-slate-600">Guardando cambios...</p> : null}
-        {isSupabaseConfigured ? <h2 className="cc-section-h px-1">Mis grupos</h2> : null}
-        <GroupList groups={state.groups} participants={state.participants} onOpenGroup={openLocalGroup} />
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3 px-1">
+            <h2 className="cc-section-h">Mis grupos</h2>
+            {state.groups.length > 0 ? (
+              <button type="button" onClick={() => setIsCreateGroupOpen(true)} className="cc-button-secondary min-h-9 px-3 text-xs">
+                <Icon name="plus" size={14} /> Crear grupo
+              </button>
+            ) : null}
+          </div>
+          {state.groups.length === 0 ? (
+            <EmptyState
+              icon="users"
+              title="Todavia no tenes grupos"
+              description="Crea uno o entra con un link de invitacion."
+              actionLabel="Crear grupo"
+              onAction={() => setIsCreateGroupOpen(true)}
+            />
+          ) : (
+            <GroupList groups={state.groups} participants={state.participants} onOpenGroup={openLocalGroup} />
+          )}
+        </section>
       </main>
+      {isCreateGroupOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4">
+          <div className="cc-bottom-sheet sm:max-w-lg">
+            <SheetHandle />
+            <CreateGroupForm
+              onCreate={(input) => {
+                setIsCreateGroupOpen(false);
+                void handleCreateGroup(input);
+              }}
+              onCancel={() => setIsCreateGroupOpen(false)}
+              requiresOwnerName={isSupabaseConfigured}
+              defaultOwnerName={profile?.displayName ?? ''}
+              defaultOwnerAlias={profile?.paymentAlias ?? ''}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

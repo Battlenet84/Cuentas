@@ -3,6 +3,7 @@ import type { Expense, Participant } from '../types';
 import { formatDate } from '../lib/dates';
 import { formatARS } from '../lib/money';
 import { EmptyState } from './EmptyState';
+import { ConfirmDialog } from './ConfirmDialog';
 
 type ExpenseListProps = {
   expenses: Expense[];
@@ -13,6 +14,7 @@ type ExpenseListProps = {
 
 export function ExpenseList({ expenses, participants, onEditExpense, onDeleteExpense }: ExpenseListProps) {
   const [error, setError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Expense | null>(null);
   const sortedExpenses = [...expenses].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
 
   function participantName(id: string): string {
@@ -43,11 +45,11 @@ export function ExpenseList({ expenses, participants, onEditExpense, onDeleteExp
     return `Partes iguales entre ${splits.map((split) => participantName(split.participantId)).join(', ')}`;
   }
 
-  async function handleDelete(expense: Expense) {
-    const confirmed = window.confirm(`Eliminar el gasto "${expense.title}"?`);
-    if (!confirmed) return;
+  async function confirmDelete() {
+    if (!pendingDelete) return;
     try {
-      await onDeleteExpense(expense.id);
+      await onDeleteExpense(pendingDelete.id);
+      setPendingDelete(null);
       setError(null);
     } catch {
       setError('No se pudo eliminar el gasto.');
@@ -55,7 +57,7 @@ export function ExpenseList({ expenses, participants, onEditExpense, onDeleteExp
   }
 
   if (sortedExpenses.length === 0) {
-    return <EmptyState title="Todavia no cargaste gastos." description="Agrega el primer gasto del grupo." />;
+    return <EmptyState icon="receipt" title="Todavia no cargaste gastos" description="Agrega el primer gasto del grupo." />;
   }
 
   return (
@@ -96,7 +98,7 @@ export function ExpenseList({ expenses, participants, onEditExpense, onDeleteExp
               </button>
               <button
                 type="button"
-                onClick={() => handleDelete(expense)}
+                onClick={() => setPendingDelete(expense)}
                 className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-700"
               >
                 Eliminar gasto
@@ -105,6 +107,15 @@ export function ExpenseList({ expenses, participants, onEditExpense, onDeleteExp
           </article>
         ))}
       </div>
+      <ConfirmDialog
+        isOpen={Boolean(pendingDelete)}
+        title="Eliminar gasto"
+        description="Esta accion no se puede deshacer."
+        confirmLabel="Eliminar"
+        tone="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </section>
   );
 }

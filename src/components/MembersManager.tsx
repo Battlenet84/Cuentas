@@ -3,6 +3,8 @@ import type { GroupMembership } from '../types';
 import type { GroupMemberView } from '../data/supabaseStorage';
 import { formatDateTime } from '../lib/dates';
 import { Avatar, Badge, SettingsBlock } from './ui';
+import { ConfirmDialog } from './ConfirmDialog';
+import { EmptyState } from './EmptyState';
 
 type MembersManagerProps = {
   members: GroupMemberView[];
@@ -27,6 +29,13 @@ export function MembersManager({
 }: MembersManagerProps) {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<null | {
+    title: string;
+    description: string;
+    confirmLabel: string;
+    tone?: 'default' | 'danger';
+    action: () => Promise<void>;
+  }>(null);
   const activeMembers = members.filter((member) => member.status === 'active');
   const pendingMembers = members.filter((member) => member.status === 'pending');
   const revokedMembers = members.filter((member) => member.status === 'revoked');
@@ -58,9 +67,13 @@ export function MembersManager({
       return;
     }
 
-    const confirmed = window.confirm('Esta persona va a perder acceso al grupo.');
-    if (!confirmed) return;
-    await run(() => onRevokeMember(member.id), 'Acceso revocado.', 'No se pudo revocar el acceso.');
+    setConfirmAction({
+      title: 'Revocar acceso',
+      description: 'Esta persona va a perder acceso al grupo.',
+      confirmLabel: 'Revocar acceso',
+      tone: 'danger',
+      action: () => run(() => onRevokeMember(member.id), 'Acceso revocado.', 'No se pudo revocar el acceso.')
+    });
   }
 
   async function handleDemote(member: GroupMemberView) {
@@ -69,6 +82,16 @@ export function MembersManager({
       return;
     }
     await run(() => onDemoteOwner?.(member.id) ?? Promise.resolve(), 'Rol actualizado.', 'No se pudo quitar owner.');
+  }
+
+  function handleReject(member: GroupMemberView) {
+    setConfirmAction({
+      title: 'Rechazar solicitud',
+      description: 'La solicitud se rechazara y la persona no podra entrar con este pedido.',
+      confirmLabel: 'Rechazar',
+      tone: 'danger',
+      action: () => run(() => onRejectMember?.(member.id) ?? Promise.resolve(), 'Solicitud rechazada.', 'No se pudo rechazar.')
+    });
   }
 
   function memberName(member: GroupMemberView): string {
@@ -82,7 +105,9 @@ export function MembersManager({
 
       <SettingsBlock title="Miembros con acceso" sub={`${activeMembers.length} activos`}>
           {activeMembers.length === 0 ? (
-            <p className="p-3 text-sm text-slate-500">Todavia no hay miembros activos.</p>
+            <div className="p-3">
+              <EmptyState icon="users" title="Sin miembros activos" description="Cuando alguien tenga acceso aprobado, va a aparecer aca." />
+            </div>
           ) : (
             activeMembers.map((member) => (
               <div key={member.id} className="cc-row flex-wrap">
@@ -135,7 +160,9 @@ export function MembersManager({
       {isOwner ? (
         <SettingsBlock title="Solicitudes pendientes" sub="Personas que pidieron entrar">
             {pendingMembers.length === 0 ? (
-              <p className="p-3 text-sm text-slate-500">No hay solicitudes pendientes.</p>
+              <div className="p-3">
+                <EmptyState icon="check" title="Sin solicitudes pendientes" description="No hay personas esperando aprobacion." />
+              </div>
             ) : (
               pendingMembers.map((member) => (
                 <div key={member.id} className="cc-row flex-wrap bg-[var(--cc-warning-soft)]">
@@ -154,7 +181,7 @@ export function MembersManager({
                     </button>
                     <button
                       type="button"
-                      onClick={() => void run(() => onRejectMember?.(member.id) ?? Promise.resolve(), 'Solicitud rechazada.', 'No se pudo rechazar.')}
+                      onClick={() => handleReject(member)}
                       className="cc-button-danger"
                     >
                       Rechazar
@@ -169,7 +196,9 @@ export function MembersManager({
       {isOwner ? (
         <SettingsBlock title="Accesos revocados">
             {revokedMembers.length === 0 ? (
-              <p className="p-3 text-sm text-slate-500">No hay accesos revocados.</p>
+              <div className="p-3">
+                <EmptyState icon="lock" title="Sin accesos revocados" description="Los accesos revocados van a aparecer aca." />
+              </div>
             ) : (
               revokedMembers.map((member) => (
                 <div key={member.id} className="cc-row">
@@ -190,6 +219,19 @@ export function MembersManager({
           <p className="mt-1">Hay mas de una membresia activa asociada al mismo participante.</p>
         </div>
       ) : null}
+      <ConfirmDialog
+        isOpen={Boolean(confirmAction)}
+        title={confirmAction?.title ?? ''}
+        description={confirmAction?.description ?? ''}
+        confirmLabel={confirmAction?.confirmLabel ?? 'Confirmar'}
+        tone={confirmAction?.tone}
+        onConfirm={async () => {
+          const action = confirmAction?.action;
+          setConfirmAction(null);
+          await action?.();
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
     </section>
   );
 }

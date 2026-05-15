@@ -6,6 +6,7 @@ import {
   activeCurrencies,
   calculateBalancesByCurrency,
   calculatePendingSettlementCents,
+  computeSettlementStatus,
   getOpenExpenses,
   getOpenSettlementPayments,
   simplifySettlementsByCurrency
@@ -22,6 +23,7 @@ import { GroupTabs, type GroupTab } from './GroupTabs';
 import { GroupMovements } from './GroupMovements';
 import { GroupProfileCard } from './GroupProfileCard';
 import { Badge, Icon, MoneyDisplay, SectionHeader, SettingsBlock, SheetHandle } from './ui';
+import { ConfirmDialog } from './ConfirmDialog';
 
 type GroupDetailProps = {
   group: Group;
@@ -102,6 +104,13 @@ export function GroupDetail({
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [isExpensePanelOpen, setIsExpensePanelOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [confirmAction, setConfirmAction] = useState<null | {
+    title: string;
+    description: string;
+    confirmLabel: string;
+    tone?: 'default' | 'danger';
+    action: () => void | Promise<void>;
+  }>(null);
 
   const groupParticipants = participants.filter((participant) => participant.groupId === group.id);
   const groupExpenses = expenses.filter((expense) => expense.groupId === group.id);
@@ -123,23 +132,37 @@ export function GroupDetail({
     [currencies, openExpenses]
   );
 
-  const balancesByCurrency = useMemo(
-    () => calculateBalancesByCurrency(group, groupParticipants, groupExpenses, openSettlementPayments),
-    [group, groupParticipants, groupExpenses, openSettlementPayments]
+  // Balances from expenses only (stable — no settlement payments fed back in)
+  const expenseBalancesByCurrency = useMemo(
+    () => calculateBalancesByCurrency(group, groupParticipants, groupExpenses, []),
+    [group, groupParticipants, groupExpenses]
   );
-  const settlementsByCurrency = useMemo(() => simplifySettlementsByCurrency(balancesByCurrency), [balancesByCurrency]);
-  const settlements = useMemo(() => Object.values(settlementsByCurrency).flat(), [settlementsByCurrency]);
+  // Stable settlements derived from expenses only; payments just mark them as done
+  const stableSettlementsByCurrency = useMemo(() => simplifySettlementsByCurrency(expenseBalancesByCurrency), [expenseBalancesByCurrency]);
+  const allStableSettlements = useMemo(() => Object.values(stableSettlementsByCurrency).flat(), [stableSettlementsByCurrency]);
+
+  // Overlay payment status without re-simplifying
+  const settlementStatusList = useMemo(
+    () => computeSettlementStatus(allStableSettlements, openSettlementPayments),
+    [allStableSettlements, openSettlementPayments]
+  );
+  const settlements = useMemo(() => settlementStatusList.filter((s) => s.remainingCents > 0).map((s) => ({ ...s.settlement, amountCents: s.remainingCents })), [settlementStatusList]);
+  const paidSettlements = useMemo(() => settlementStatusList.filter((s) => s.remainingCents === 0), [settlementStatusList]);
+
   const pendingSettlementByCurrency = useMemo(
     () =>
       Object.fromEntries(
         currencies.map((currency) => [
           currency,
-          calculatePendingSettlementCents(settlementsByCurrency[currency] ?? [])
+          settlements.filter((s) => s.currency === currency).reduce((total, s) => total + s.amountCents, 0)
         ])
       ),
-    [currencies, settlementsByCurrency]
+    [currencies, settlements]
   );
   const pendingSettlementCents = settlements.reduce((total, settlement) => total + settlement.amountCents, 0);
+
+  // Expense-only balances per participant for the per-person breakdown
+  const expenseBalancesByCurrencyForDisplay = expenseBalancesByCurrency;
 
   useEffect(() => {
     onExpensePanelOpenChange?.(isExpensePanelOpen);
@@ -163,7 +186,7 @@ export function GroupDetail({
     if (settlements.length === 0) lines.push('Todo esta saldado.');
     else {
       for (const currency of currencies) {
-        const currencySettlements = settlementsByCurrency[currency] ?? [];
+        const currencySettlements = settlements.filter((s) => s.currency === currency);
         if (currencySettlements.length === 0) continue;
         lines.push('', `${currency}:`);
         for (const settlement of currencySettlements) {
@@ -222,20 +245,31 @@ export function GroupDetail({
 
   async function handleClose() {
     if (openExpenses.length === 0 || pendingSettlementCents > 0) return;
-    const confirmed = window.confirm(
-      'Esto va a archivar los gastos y pagos abiertos del periodo. Usalo solo si ya esta todo saldado.'
-    );
-    if (confirmed) await onCloseOpenExpenses();
+    setConfirmAction({
+      title: 'Cerrar periodo',
+      description: 'Se archivaran los gastos y pagos ya saldados.',
+      confirmLabel: 'Cerrar periodo',
+      action: onCloseOpenExpenses
+    });
   }
 
   async function handleRegenerateInvite() {
-    const confirmed = window.confirm('Los links anteriores dejaran de servir para nuevas personas. Los miembros actuales mantienen acceso.');
-    if (confirmed) await onRegenerateInvite?.();
+    setConfirmAction({
+      title: 'Regenerar link',
+      description: 'El link anterior dejara de servir para nuevas solicitudes.',
+      confirmLabel: 'Regenerar',
+      action: () => onRegenerateInvite?.()
+    });
   }
 
   async function handleVoidPayment(paymentId: string) {
-    const confirmed = window.confirm('¿Queres anular este pago registrado?');
-    if (confirmed) await onVoidSettlementPayment?.(paymentId);
+    setConfirmAction({
+      title: 'Anular pago',
+      description: 'El pago quedara marcado como anulado y dejara de contar en el periodo abierto.',
+      confirmLabel: 'Anular pago',
+      tone: 'danger',
+      action: () => onVoidSettlementPayment?.(paymentId)
+    });
   }
 
   const expenseForm = (
@@ -312,9 +346,75 @@ export function GroupDetail({
               </div>
             ))}
           </section>
-          {openExpenses.length === 0 ? <EmptyState title="Todavia no hay gastos abiertos." /> : null}
-          {settlements.length === 0 && openExpenses.length > 0 ? <EmptyState title="Todavia no hay deudas pendientes." /> : null}
+          {openExpenses.length === 0 ? (
+            <EmptyState icon="receipt" title="Todavia no hay gastos abiertos" description="Carga el primer gasto y empezamos a calcular como se divide." />
+          ) : null}
+          {settlements.length === 0 && openExpenses.length > 0 ? (
+            <EmptyState icon="check" title="Todo saldado" description="No hay deudas pendientes en este grupo." />
+          ) : null}
           <SettlementList settlements={settlements} participants={groupParticipants} onSettle={onSettleDebt} />
+
+          {paidSettlements.length > 0 ? (
+            <div className="space-y-2">
+              <p className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Pagos registrados</p>
+              {paidSettlements.map((item, index) => {
+                const fromName = groupParticipants.find((p) => p.id === item.settlement.fromParticipantId)?.name ?? 'Participante';
+                const toName = groupParticipants.find((p) => p.id === item.settlement.toParticipantId)?.name ?? 'Participante';
+                return (
+                  <div key={index} className="cc-card flex items-center gap-3 p-3 opacity-60">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--cc-positive-soft)] text-[var(--cc-positive)]">
+                      <Icon name="check" size={14} />
+                    </span>
+                    <p className="min-w-0 flex-1 text-sm text-slate-700">
+                      <span className="font-semibold">{fromName}</span> pagó a <span className="font-semibold">{toName}</span>
+                    </p>
+                    <p className="num text-sm font-semibold text-slate-500">{formatCurrencyAmount(item.settlement.amountCents, item.settlement.currency)}</p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {/* Per-person breakdown */}
+          {currencies.map((currency) => {
+            const balances = expenseBalancesByCurrencyForDisplay[currency] ?? [];
+            if (balances.length === 0) return null;
+            return (
+              <section key={`breakdown-${currency}`} className="cc-card p-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Movimientos por persona · {currency}</p>
+                <div className="space-y-2">
+                  {balances.map((balance) => {
+                    const participant = groupParticipants.find((p) => p.id === balance.participantId);
+                    if (!participant) return null;
+                    const isCreditor = balance.balanceCents > 0;
+                    const isDebtor = balance.balanceCents < 0;
+                    return (
+                      <div key={balance.participantId} className="rounded-xl bg-slate-50 p-3">
+                        <p className="text-sm font-semibold text-slate-900">{participant.name}</p>
+                        <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                          <div>
+                            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Puso</p>
+                            <p className="num mt-0.5 text-sm font-semibold text-slate-700">{formatCurrencyAmount(balance.paidCents, currency)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Gastó</p>
+                            <p className="num mt-0.5 text-sm font-semibold text-slate-700">{formatCurrencyAmount(balance.owedCents, currency)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Balance</p>
+                            <p className={`num mt-0.5 text-sm font-semibold ${isCreditor ? 'text-[var(--cc-positive)]' : isDebtor ? 'text-red-600' : 'text-slate-400'}`}>
+                              {balance.balanceCents > 0 ? '+' : ''}{formatCurrencyAmount(balance.balanceCents, currency)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+
           <button type="button" onClick={handleCopySummary} className="cc-button-secondary w-full">
             <Icon name="copy" size={15} /> Copiar resumen
           </button>
@@ -498,6 +598,19 @@ export function GroupDetail({
           </div>
         </div>
       ) : null}
+      <ConfirmDialog
+        isOpen={Boolean(confirmAction)}
+        title={confirmAction?.title ?? ''}
+        description={confirmAction?.description ?? ''}
+        confirmLabel={confirmAction?.confirmLabel ?? 'Confirmar'}
+        tone={confirmAction?.tone}
+        onConfirm={async () => {
+          const action = confirmAction?.action;
+          setConfirmAction(null);
+          await action?.();
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
     </div>
   );
 }

@@ -3,7 +3,8 @@ import type { ActivityLog, CurrencyCode, Expense, ExpenseSplit, Participant, Set
 import { formatDate, formatMovementDateGroup, movementDateKey } from '../lib/dates';
 import { formatCurrencyAmount, normalizeCurrency, supportedCurrencies } from '../lib/money';
 import { EmptyState } from './EmptyState';
-import { Badge, Icon, SheetHandle } from './ui';
+import { Badge, ChipButton, Icon, SelectField, SheetHandle } from './ui';
+import { ConfirmDialog } from './ConfirmDialog';
 
 type MovementFilter = 'all' | 'expenses' | 'payments' | 'cycles' | 'activity';
 type DateFilter = 'all' | 'today' | 'last7' | 'month';
@@ -51,6 +52,10 @@ export function GroupMovements({
   const [error, setError] = useState<string | null>(null);
   const [detailExpense, setDetailExpense] = useState<Expense | null>(null);
   const [detailCycle, setDetailCycle] = useState<SettlementCycle | null>(null);
+  const [pendingDeleteExpense, setPendingDeleteExpense] = useState<Expense | null>(null);
+  const [pendingVoidPaymentId, setPendingVoidPaymentId] = useState<string | null>(null);
+  const hasSecondaryFilters = participantFilter !== 'all' || currencyFilter !== 'all' || dateFilter !== 'all';
+  const hasAnyFilters = query.trim() || filter !== 'all' || hasSecondaryFilters;
 
   const movementGroups = useMemo(() => {
     const items: MovementItem[] = [
@@ -79,22 +84,23 @@ export function GroupMovements({
     return Array.from(groups.entries()).map(([date, groupItems]) => ({ date, items: groupItems }));
   }, [activityLogs, currencyFilter, dateFilter, expenses, filter, participantFilter, query, settlementCycles, settlementPayments]);
 
-  async function handleDelete(expense: Expense) {
-    const confirmed = window.confirm(`Eliminar el gasto "${expense.title}"?`);
-    if (!confirmed) return;
+  async function confirmDeleteExpense() {
+    if (!pendingDeleteExpense) return;
     try {
-      await onDeleteExpense(expense.id);
+      await onDeleteExpense(pendingDeleteExpense.id);
+      setPendingDeleteExpense(null);
+      if (detailExpense?.id === pendingDeleteExpense.id) setDetailExpense(null);
       setError(null);
     } catch {
       setError('No se pudo eliminar el gasto.');
     }
   }
 
-  async function handleVoid(paymentId: string) {
-    const confirmed = window.confirm('Queres anular este pago registrado?');
-    if (!confirmed) return;
+  async function confirmVoidPayment() {
+    if (!pendingVoidPaymentId) return;
     try {
-      await onVoidSettlementPayment?.(paymentId);
+      await onVoidSettlementPayment?.(pendingVoidPaymentId);
+      setPendingVoidPaymentId(null);
       setError(null);
     } catch {
       setError('No se pudo anular el pago.');
@@ -195,52 +201,52 @@ export function GroupMovements({
       <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
         <div className="flex min-w-max gap-2">
           {filters.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setFilter(item.id)}
-              className={`cc-pill min-h-9 shadow-sm transition ${
-                filter === item.id
-                  ? 'cc-chip-active'
-                  : ''
-              }`}
-            >
+            <ChipButton key={item.id} active={filter === item.id} onClick={() => setFilter(item.id)}>
               {item.label}
-            </button>
+            </ChipButton>
           ))}
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-3">
-        <select value={participantFilter} onChange={(event) => setParticipantFilter(event.target.value)} className="cc-input">
+      <div className="cc-card grid gap-2 p-3 sm:grid-cols-3">
+        <SelectField value={participantFilter} onChange={(event) => setParticipantFilter(event.target.value)}>
           <option value="all">Participante: Todos</option>
           {participants.map((participant) => (
             <option key={participant.id} value={participant.id}>
               {participant.name}
             </option>
           ))}
-        </select>
-        <select value={currencyFilter} onChange={(event) => setCurrencyFilter(event.target.value as 'all' | CurrencyCode)} className="cc-input">
+        </SelectField>
+        <SelectField value={currencyFilter} onChange={(event) => setCurrencyFilter(event.target.value as 'all' | CurrencyCode)}>
           <option value="all">Moneda: Todas</option>
           {supportedCurrencies.map((currency) => (
             <option key={currency} value={currency}>
               {currency}
             </option>
           ))}
-        </select>
-        <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value as DateFilter)} className="cc-input">
+        </SelectField>
+        <SelectField value={dateFilter} onChange={(event) => setDateFilter(event.target.value as DateFilter)}>
           <option value="all">Fecha: Todas</option>
           <option value="today">Hoy</option>
           <option value="last7">Ultimos 7 dias</option>
           <option value="month">Este mes</option>
-        </select>
+        </SelectField>
+        {hasAnyFilters ? (
+          <button type="button" onClick={resetFilters} className="cc-button-ghost sm:col-span-3">
+            Limpiar filtros
+          </button>
+        ) : null}
       </div>
 
       {error ? <p className="cc-banner cc-banner-error">{error}</p> : null}
 
       {movementGroups.length === 0 ? (
         <div className="space-y-3">
-          <EmptyState title={emptyTitle()} />
+          <EmptyState
+            icon={hasAnyFilters ? 'search' : 'receipt'}
+            title={emptyTitle()}
+            description={hasAnyFilters ? 'Proba con otro termino o saca los filtros.' : 'Cuando cargues gastos o pagos, van a aparecer aca.'}
+          />
           {(query.trim() || participantFilter !== 'all' || currencyFilter !== 'all' || dateFilter !== 'all') ? (
             <button type="button" onClick={resetFilters} className="cc-button-secondary">
               Limpiar filtros
@@ -262,20 +268,20 @@ export function GroupMovements({
                         payerText={payerText(item.expense)}
                         onViewDetail={setDetailExpense}
                         onEditExpense={onEditExpense}
-                        onDeleteExpense={handleDelete}
+                        onDeleteExpense={setPendingDeleteExpense}
                       />
                     );
                   }
 
                   if (item.type === 'payment') {
                     return (
-                      <PaymentMovementCard
+                    <PaymentMovementCard
                         key={`payment-${item.payment.id}`}
                         payment={item.payment}
                         fromName={participantName(item.payment.fromParticipantId)}
                         toName={participantName(item.payment.toParticipantId)}
                         toAlias={participantAlias(item.payment.toParticipantId)}
-                        onVoid={onVoidSettlementPayment ? handleVoid : undefined}
+                      onVoid={onVoidSettlementPayment ? setPendingVoidPaymentId : undefined}
                       />
                     );
                   }
@@ -316,8 +322,7 @@ export function GroupMovements({
             onEditExpense(expense);
           }}
           onDelete={(expense) => {
-            setDetailExpense(null);
-            void handleDelete(expense);
+            setPendingDeleteExpense(expense);
           }}
         />
       ) : null}
@@ -331,6 +336,24 @@ export function GroupMovements({
           onClose={() => setDetailCycle(null)}
         />
       ) : null}
+      <ConfirmDialog
+        isOpen={Boolean(pendingDeleteExpense)}
+        title="Eliminar gasto"
+        description="Esta accion no se puede deshacer."
+        confirmLabel="Eliminar"
+        tone="danger"
+        onConfirm={confirmDeleteExpense}
+        onCancel={() => setPendingDeleteExpense(null)}
+      />
+      <ConfirmDialog
+        isOpen={Boolean(pendingVoidPaymentId)}
+        title="Anular pago"
+        description="El pago quedara marcado como anulado y dejara de contar en el periodo abierto."
+        confirmLabel="Anular pago"
+        tone="danger"
+        onConfirm={confirmVoidPayment}
+        onCancel={() => setPendingVoidPaymentId(null)}
+      />
     </section>
   );
 }
