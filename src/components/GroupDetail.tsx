@@ -6,7 +6,6 @@ import {
   activeCurrencies,
   calculateBalancesByCurrency,
   calculatePendingSettlementCents,
-  computeSettlementStatus,
   getOpenExpenses,
   getOpenSettlementPayments,
   simplifySettlementsByCurrency
@@ -132,37 +131,30 @@ export function GroupDetail({
     [currencies, openExpenses]
   );
 
-  // Balances from expenses only (stable — no settlement payments fed back in)
-  const expenseBalancesByCurrency = useMemo(
-    () => calculateBalancesByCurrency(group, groupParticipants, groupExpenses, []),
-    [group, groupParticipants, groupExpenses]
+  // Settlement calculation (payment-inclusive) — stays in sync with server-side validation
+  const balancesByCurrency = useMemo(
+    () => calculateBalancesByCurrency(group, groupParticipants, groupExpenses, openSettlementPayments),
+    [group, groupParticipants, groupExpenses, openSettlementPayments]
   );
-  // Stable settlements derived from expenses only; payments just mark them as done
-  const stableSettlementsByCurrency = useMemo(() => simplifySettlementsByCurrency(expenseBalancesByCurrency), [expenseBalancesByCurrency]);
-  const allStableSettlements = useMemo(() => Object.values(stableSettlementsByCurrency).flat(), [stableSettlementsByCurrency]);
-
-  // Overlay payment status without re-simplifying
-  const settlementStatusList = useMemo(
-    () => computeSettlementStatus(allStableSettlements, openSettlementPayments),
-    [allStableSettlements, openSettlementPayments]
-  );
-  const settlements = useMemo(() => settlementStatusList.filter((s) => s.remainingCents > 0).map((s) => ({ ...s.settlement, amountCents: s.remainingCents })), [settlementStatusList]);
-  const paidSettlements = useMemo(() => settlementStatusList.filter((s) => s.remainingCents === 0), [settlementStatusList]);
-
+  const settlementsByCurrency = useMemo(() => simplifySettlementsByCurrency(balancesByCurrency), [balancesByCurrency]);
+  const settlements = useMemo(() => Object.values(settlementsByCurrency).flat(), [settlementsByCurrency]);
   const pendingSettlementByCurrency = useMemo(
     () =>
       Object.fromEntries(
         currencies.map((currency) => [
           currency,
-          settlements.filter((s) => s.currency === currency).reduce((total, s) => total + s.amountCents, 0)
+          calculatePendingSettlementCents(settlementsByCurrency[currency] ?? [])
         ])
       ),
-    [currencies, settlements]
+    [currencies, settlementsByCurrency]
   );
   const pendingSettlementCents = settlements.reduce((total, settlement) => total + settlement.amountCents, 0);
 
-  // Expense-only balances per participant for the per-person breakdown
-  const expenseBalancesByCurrencyForDisplay = expenseBalancesByCurrency;
+  // Expense-only balances for per-person breakdown (transparency view)
+  const expenseBalancesByCurrencyForDisplay = useMemo(
+    () => calculateBalancesByCurrency(group, groupParticipants, groupExpenses, []),
+    [group, groupParticipants, groupExpenses]
+  );
 
   useEffect(() => {
     onExpensePanelOpenChange?.(isExpensePanelOpen);
@@ -186,7 +178,7 @@ export function GroupDetail({
     if (settlements.length === 0) lines.push('Todo esta saldado.');
     else {
       for (const currency of currencies) {
-        const currencySettlements = settlements.filter((s) => s.currency === currency);
+        const currencySettlements = settlementsByCurrency[currency] ?? [];
         if (currencySettlements.length === 0) continue;
         lines.push('', `${currency}:`);
         for (const settlement of currencySettlements) {
@@ -354,21 +346,21 @@ export function GroupDetail({
           ) : null}
           <SettlementList settlements={settlements} participants={groupParticipants} onSettle={onSettleDebt} />
 
-          {paidSettlements.length > 0 ? (
+          {openSettlementPayments.length > 0 ? (
             <div className="space-y-2">
-              <p className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Pagos registrados</p>
-              {paidSettlements.map((item, index) => {
-                const fromName = groupParticipants.find((p) => p.id === item.settlement.fromParticipantId)?.name ?? 'Participante';
-                const toName = groupParticipants.find((p) => p.id === item.settlement.toParticipantId)?.name ?? 'Participante';
+              <p className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Pagos registrados este periodo</p>
+              {openSettlementPayments.map((payment) => {
+                const fromName = groupParticipants.find((p) => p.id === payment.fromParticipantId)?.name ?? 'Participante';
+                const toName = groupParticipants.find((p) => p.id === payment.toParticipantId)?.name ?? 'Participante';
                 return (
-                  <div key={index} className="cc-card flex items-center gap-3 p-3 opacity-60">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--cc-positive-soft)] text-[var(--cc-positive)]">
+                  <div key={payment.id} className="cc-card flex items-center gap-3 p-3 opacity-70">
+                    <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[var(--cc-positive-soft)] text-[var(--cc-positive)]">
                       <Icon name="check" size={14} />
                     </span>
                     <p className="min-w-0 flex-1 text-sm text-slate-700">
                       <span className="font-semibold">{fromName}</span> pagó a <span className="font-semibold">{toName}</span>
                     </p>
-                    <p className="num text-sm font-semibold text-slate-500">{formatCurrencyAmount(item.settlement.amountCents, item.settlement.currency)}</p>
+                    <p className="num text-sm font-semibold text-slate-500">{formatCurrencyAmount(payment.amountCents, payment.currency)}</p>
                   </div>
                 );
               })}
